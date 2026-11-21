@@ -1,0 +1,148 @@
+---
+title: "A random walker's reach grows as the square root of time"
+subtitle: "The mean squared displacement, defined and measured on simulated walkers"
+author:
+  - name: "A. Author"
+    affiliations:
+      - "An Institute"
+      - "Place · Month Year"
+# The title slide's narration: sentences separated by "|".
+title-slide-attributes:
+  data-say: "Release a crowd of walkers from one point, and let each take random steps.|How far do they get? This short talk defines the quantity that answers that, and then measures it."
+# Voice and pauses (all optional). spoken: how to say what the speech engine misreads; the captions keep the text.
+narrate:
+  voice: af_heart
+  speed: 1.0
+  spoken:
+    "4D": "four D"
+# Numbers computed by figures.py, quoted below as {{< meta v.NAME >}}.
+metadata-files: [build/values.yml]
+format:
+  revealjs:
+    theme: [default, theme/ehsan-sci-theme.scss]
+    width: 980
+    height: 552
+    margin: 0.04
+    slide-number: c/t
+    show-slide-number: all
+    transition: fade
+    transition-speed: fast
+    progress: false
+    controls: false
+    menu: false
+    html-math-method: katex
+    # Equations, figures and speech all go into one talk.html that works offline.
+    self-contained-math: true
+    embed-resources: true
+    revealjs-plugins: [narrate]
+    include-in-header:
+      text: '<script src="media/manifest.js"></script>'
+---
+
+# [01 · The quantity]{.eyebrow} What does "how far" mean? {.divider .center}
+
+::: say
+First, the quantity. What do we mean by how far?
+:::
+
+## The mean squared displacement averages the squared distance
+
+::: {.columns}
+::: {.column width="44%"}
+{{< include build/fig/walker.html >}}
+:::
+
+::: {.column width="56%"}
+::: {.say grow="#walker-path"}
+Follow a single walker. Its path is erratic, and it returns again and again.
+:::
+
+One walker, {{< meta v.shown >}} steps of random direction and length.
+
+::: {.say point="#walker-arrow"}
+After a time t it has moved by a displacement, the orange arrow.
+:::
+
+Its **displacement** after a time $t$ is $\Delta\mathbf{r}(t)$.
+
+::: {.say point="#msd-def"}
+We square the length of that arrow, and average it over all walkers. That is the mean squared displacement.
+:::
+
+::: {#msd-def}
+$$
+\langle\Delta r^2\rangle(t)=\frac{1}{N}\sum_{i=1}^{N}\left|\Delta\mathbf{r}_i(t)\right|^2
+$$
+:::
+
+::: say
+For diffusion it grows in proportion to time, with a slope of four times the diffusion constant.
+:::
+
+::: {.takeaway}
+Diffusion in two dimensions: $\langle\Delta r^2\rangle = 4Dt$
+:::
+:::
+:::
+
+# [02 · The measurement]{.eyebrow} Do the walkers follow it? {.divider .center}
+
+::: say
+Now the measurement.
+:::
+
+## The walkers spread in proportion to time
+
+::: {.columns}
+::: {.column width="56%"}
+{{< include build/fig/msd.html >}}
+:::
+
+::: {.column width="44%"}
+::: say
+Here is the mean squared displacement of our {{< meta v.walkers >}} walkers, against time.
+:::
+
+- Blue: the average over {{< meta v.walkers >}} walkers
+
+::: {.say point="#msd-fit"}
+A straight line fits it. Its slope gives a diffusion constant of {{< meta v.D >}}.
+:::
+
+- Orange: a straight line through the origin
+
+::: say
+So in twice the time the crowd covers twice the area, and the measurement returns the constant we put in.
+:::
+
+- Twice the time, twice the area covered
+
+::: {.takeaway}
+The slope returns the $D$ we put in: {{< meta v.D >}} against {{< meta v.D0 >}}
+:::
+:::
+:::
+
+## Summary: the reach grows as the square root of time
+
+::: say
+To summarise. The mean squared displacement measures how far a crowd of walkers gets.
+:::
+
+- The mean squared displacement measures how far a crowd of walkers gets
+
+::: say
+For diffusion it is a straight line in time, and its slope is four times the diffusion constant.
+:::
+
+- For diffusion it is a straight line in time, with slope 4D
+
+::: say
+The typical distance is its square root. A random walker's reach therefore grows only as the square root of time. Thank you for your attention.
+:::
+
+- Its square root, the typical distance, grows only as the square root of time
+
+::: {.box .model}
+Simulated walkers: independent Gaussian steps, one seed. In a real talk, say here what the pictures are made from.
+:::

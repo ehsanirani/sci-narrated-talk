@@ -1,0 +1,281 @@
+"""Build a narrated talk from a Quarto deck (the sci-narrated-talk skill). Run inside the talk's directory:
+
+    uv run --no-project --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib python narrate.py [talk.qmd]
+
+The steps, in order:
+  1. figures.py, if there is one: the drawings (build/fig/*.html) and the numbers (build/values.yml);
+  2. the speech of every `::: say` sentence (Kokoro, one mp3 per sentence, cached in media/audio/);
+  3. media/manifest.js: the sentence files and their lengths, which are the talk's clock;
+  4. quarto render;
+  5. a run-through in headless Chromium, offline: every sentence reached in order, the equations rendered, nothing
+     outside its slide, nothing loaded from the network.
+
+  --script     print the narration with words, seconds and audio file per sentence; build nothing
+  --shots      after the build: a screenshot of every slide's last stage in build/shots/ (contact sheets with pillow)
+  --no-check   skip step 5
+  --voices     list the voices
+
+Settings, in the deck's front matter (all optional):
+    narrate: {voice: af_heart, speed: 1.0, lang: en-us, lead: 0.7, gap: 0.4, tail: 1.0, spoken: {"Péclet": "Pay-clay"},
+              embed: true}
+embed: the speech goes into talk.html (one file to send); false leaves it in media/audio/ beside the page.
+An mp3 that already exists in media/audio/ under a sentence's name is used as it is, so a recorded voice or another
+speech engine can replace Kokoro file by file (`--script` prints the names).
+"""
+
+import base64
+import hashlib
+import json
+import os
+import re
+import runpy
+import shutil
+import subprocess
+import sys
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+WPM = 155  # spoken words per minute, pauses included
+LONG = 45  # words; a longer sentence is flagged
+KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
+LANG = {"a": "en-us", "b": "en-gb", "e": "es", "f": "fr-fr", "h": "hi", "i": "it", "j": "ja", "p": "pt-br", "z": "cmn"}
+SAY = re.compile(r"^:::+ *(?:\{[^}\n]*\.say\b[^}\n]*\}|say) *\n(.*?)^:::+ *$", re.M | re.S)
+BUILD, MEDIA = Path("build"), Path("media")
+
+
+# ---------------------------------------------------------------- for figures.py
+def figure(fig, name):
+    """Write build/fig/<name>.html, the matplotlib figure as inline SVG; put it on a slide with
+    {{< include build/fig/<name>.html >}}. An artist with gid="s2-fit" gets the id "<name>-fit" and appears with
+    sentence 2 of its slide; a gid without "sN-" only names the part ("<name>-<gid>"), for point= and grow=."""
+    import io
+
+    import matplotlib.pyplot as plt
+
+    buf = io.StringIO()
+    with plt.rc_context({"svg.fonttype": "none", "svg.hashsalt": name}):  # text stays text; ids are stable
+        fig.savefig(buf, format="svg", transparent=True, metadata={"Date": None})
+    plt.close(fig)
+    s = buf.getvalue()
+    s = re.sub(r"<metadata>.*?</metadata>\s*", "", s[s.index("<svg"):], flags=re.S)
+
+    def ident(m):
+        k, part = re.fullmatch(r"(?:s(\d+)-)?(.+)", m.group(1)).groups()
+        k = int(k or 1) - 1  # the sentence that introduces the part, counted from 0 as the player does
+        return f'id="{name}-{part}"' + (f' class="fragment" data-fragment-index="{k - 1}"' if k else "") + (
+            f' data-k="{k}"' if m.group(1) != part or k else "")
+
+    s = re.sub(r'\bid="([^"]+)"', ident, s)
+    s = re.sub(r"url\(#([^)]+)\)", rf"url(#{name}-\1)", s)
+    s = re.sub(r'href="#([^"]+)"', rf'href="#{name}-\1"', s)
+    s = re.sub(r'<svg ([^>]*?)width="[^"]*" height="[^"]*"', rf'<svg id="{name}" class="nar-fig" \1', s, count=1)
+    (BUILD / "fig").mkdir(parents=True, exist_ok=True)
+    (BUILD / "fig" / f"{name}.html").write_text(f"```{{=html}}\n{s}\n```\n")
+
+
+def values(**kw):
+    """Write build/values.yml: numbers the slides and the narration quote as {{< meta v.NAME >}}."""
+    BUILD.mkdir(exist_ok=True)
+    (BUILD / "values.yml").write_text("v:\n" + "".join(f"  {k}: {json.dumps(str(x))}\n" for k, x in kw.items()))
+
+
+# ---------------------------------------------------------------- the deck
+def read(qmd, strict=True):
+    """(front matter with its metadata-files merged in, body with the {{< meta >}} shortcodes filled in)."""
+    import yaml
+
+    text = qmd.read_text()
+    m = re.match(r"---\n(.*?)\n---\n", text, re.S)
+    meta = yaml.safe_load(m.group(1)) if m else {}
+    for f in meta.get("metadata-files") or []:
+        if Path(f).exists():
+            meta.update(yaml.safe_load(Path(f).read_text()) or {})
+
+    def fill(mm):
+        v = meta
+        for key in mm.group(1).split("."):
+            v = v.get(key) if isinstance(v, dict) else None
+        if v is None and strict:
+            sys.exit(f"{mm.group(0)} has no value: figures.py writes them with values(), or set it in the front matter")
+        return str(v if v is not None else f"<{mm.group(1)}>")
+
+    return meta, re.sub(r"\{\{< meta ([\w.-]+) >\}\}", fill, text[m.end():] if m else text)
+
+
+def plain(md):
+    """A sentence as it is spoken: the text without its markup."""
+    s = re.sub(r"\[([^\]]*)\]\{[^}]*\}", r"\1", md)
+    return " ".join(re.sub(r"[*_`]", "", s).split())
+
+
+def slides(meta, body):
+    """[(title, [spoken sentence, ...])]: the title slide's data-say, then every `::: say` block under its heading."""
+    first = (meta.get("title-slide-attributes") or {}).get("data-say", "")
+    out = [(meta.get("title", "(before the first heading)"), [plain(s) for s in first.split("|") if s.strip()])]
+    for part in re.split(r"^(?=#{1,2} )", body, flags=re.M):
+        head = re.match(r"#{1,2} +(.*)", part)
+        title = re.sub(r"\[[^\]]*\]\{\.eyebrow\}|\{[^}]*\}", "", head.group(1)).strip() if head else None
+        says = [plain(s) for s in SAY.findall(part) if plain(s)]  # a block without text is a silent step
+        if head:
+            out.append((title, says))
+        else:
+            out[0][1].extend(says)
+    for title, says in out:
+        for s in says:
+            if "$" in s or "\\" in s:
+                sys.exit(f"narration with math or a backslash on slide {title!r}: write the words instead\n  {s}")
+    return out
+
+
+# ---------------------------------------------------------------- speech
+def fetch(url, path):
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        print(f"downloading {path.name} to {path.parent} (once)", flush=True)
+        tmp = path.with_name(path.name + ".part")
+        urllib.request.urlretrieve(url, tmp)
+        tmp.rename(path)
+    return path
+
+
+def kokoro():
+    """The Kokoro model, in KOKORO_DIR (default ~/.cache/kokoro); downloaded on first use (340 MB)."""
+    from kokoro_onnx import Kokoro
+
+    d = Path(os.environ.get("KOKORO_DIR", Path.home() / ".cache/kokoro"))
+    return Kokoro(*(str(fetch(KOKORO_URL + f, d / f)) for f in ("kokoro-v1.0.onnx", "voices-v1.0.bin")))
+
+
+def settings(meta):
+    c = dict(voice="af_heart", speed=1.0, lead=0.7, gap=0.4, tail=1.0, spoken={}, embed=True) | (meta.get("narrate") or {})
+    c.setdefault("lang", LANG.get(c["voice"][0], "en-us"))
+    return c
+
+
+def mp3(sentence, c):
+    """Where the sentence's audio lives: named by voice, speed, language and the text as spoken."""
+    for a, b in c["spoken"].items():
+        sentence = sentence.replace(a, b)
+    key = hashlib.sha1(f"{c['voice']}|{c['speed']}|{c['lang']}|{sentence}".encode()).hexdigest()[:16]
+    return MEDIA / "audio" / f"{key}.mp3", sentence
+
+
+def speech(sentences, c, embed):
+    """Synthesise what is missing; return the manifest's entries (src, dur) in order."""
+    import soundfile
+
+    (MEDIA / "audio").mkdir(parents=True, exist_ok=True)
+    model, out = None, []
+    for s in sentences:
+        p, spoken = mp3(s, c)
+        if not p.exists():
+            model = model or kokoro()
+            a, sr = model.create(spoken, voice=c["voice"], speed=c["speed"], lang=c["lang"])
+            soundfile.write(p, a, sr, format="MP3")
+            print(f"  spoke: {s[:70]}", flush=True)
+        src = "data:audio/mpeg;base64," + base64.b64encode(p.read_bytes()).decode() if embed else p.as_posix()
+        # t: the sentence's letters and digits, by which the page notices narration that changed after this build
+        out.append(dict(src=src, dur=round(soundfile.info(p).duration, 3), t=re.sub(r"[\W_]", "", s).lower()))
+    return out
+
+
+# ---------------------------------------------------------------- checks in headless Chromium
+def chromium(*args, timeout=600):
+    exe = next((e for e in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable") if shutil.which(e)), None)
+    if not exe:
+        sys.exit("no chromium or google-chrome on the PATH: the check and the screenshots need one (or pass --no-check)")
+    return subprocess.run([exe, "--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
+                           "--host-resolver-rules=MAP * ~NOTFOUND", *args], capture_output=True, text=True, timeout=timeout).stdout
+
+
+def check(html, seconds):
+    """Play the talk through at 50x without sound and with the network cut. Returns the number of slides."""
+    dom = chromium(f"--virtual-time-budget={int(60_000 + 40 * seconds * 1000 / 50 * 2)}", "--dump-dom", f"{html.resolve().as_uri()}?fast")
+    body = re.search(r"<body[^>]*>", dom)
+    if not body:
+        sys.exit("check: Chromium returned no page")
+    d = dict(re.findall(r'data-(\w+)="([^"]*)"', body.group(0)))
+    log = [tuple(map(int, x.split("."))) for x in d.get("log", "").split()]
+    bad = []
+    if d.get("error"):
+        bad.append(d["error"])
+    if not d.get("done"):
+        bad.append(f"the talk stopped at slide.sentence {'.'.join(map(str, log[-1])) if log else '?'}")
+    if log != sorted(set(log)) or len(log) != int(d.get("steps", -1)):
+        bad.append(f"visited {len(log)} positions, the talk has {d.get('steps')} (or out of order): {d.get('log')}")
+    raw = [m for m in re.findall(r'<span class="math (?:inline|display)">(.{0,40})', dom) if not m.startswith("<span class=\"katex")]
+    if raw:
+        bad.append(f"{len(raw)} equations left as raw TeX, e.g. {raw[0]!r}")
+    remote = sorted(set(re.findall(r'<(?:script|link|img|video|audio|source|iframe)\b[^>]*?(?:src|href)="(https?://[^"]+)', dom)))
+    if remote:
+        bad.append(f"loads from the network, so not offline: {remote[:3]}")
+    if d.get("over"):
+        bad.append(f"reaches outside its slide: {d['over']}")
+    if d.get("hidden"):
+        bad.append(f"content that no sentence reveals (a fragment or `. . .` pause of your own; stage with say blocks): {d['hidden']}")
+    if bad:
+        sys.exit("check failed:\n- " + "\n- ".join(bad))
+    n = log[-1][0]
+    print(f"check: {len(log)} steps on {n} slides reached in order, equations rendered, nothing outside a slide or left hidden, offline")
+    return n
+
+
+def shots(html, n):
+    out = BUILD / "shots"
+    out.mkdir(parents=True, exist_ok=True)
+    files = [out / f"{i:02d}.png" for i in range(1, n + 1)]
+    with ThreadPoolExecutor(4) as ex:
+        list(ex.map(lambda a: chromium("--window-size=1280,720", "--virtual-time-budget=4000", f"--screenshot={a[1]}",
+                                       f"{html.resolve().as_uri()}?shot#{a[0]}"), enumerate(files, 1)))
+    try:
+        from PIL import Image
+    except ImportError:
+        return print(f"shots: {len(files)} in {out}/ (add --with pillow for contact sheets)")
+    for j in range(0, n, 9):  # nine slides to a sheet
+        sheet = Image.new("RGB", (1920, 1080), "white")
+        for i, f in enumerate(files[j:j + 9]):
+            sheet.paste(Image.open(f).resize((640, 360)), (640 * (i % 3), 360 * (i // 3)))
+        sheet.save(out / f"sheet-{j // 9 + 1}.png")
+    print(f"shots: {len(files)} in {out}/, contact sheets sheet-*.png")
+
+
+# ---------------------------------------------------------------- main
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    flags = {a for a in sys.argv[1:] if a.startswith("--")}
+    if unknown := flags - {"--script", "--shots", "--no-check", "--voices"}:
+        sys.exit(f"unknown option {sorted(unknown)}\n{__doc__}")
+    if "--voices" in flags:
+        return print(" ".join(sorted(kokoro().get_voices())))
+    qmd = Path(args[0] if args else "talk.qmd").resolve()
+    os.chdir(qmd.parent)
+    if "--script" not in flags and Path("figures.py").exists():
+        sys.modules["narrate"] = sys.modules[__name__]  # figures.py does `from narrate import figure, values`
+        runpy.run_path("figures.py", run_name="__main__")
+    meta, body = read(qmd, strict="--script" not in flags)
+    c, deck = settings(meta), slides(meta, body)
+    sentences = [s for _, says in deck for s in says]
+    words = sum(len(s.split()) for s in sentences)
+    if "--script" in flags:
+        for n, (title, says) in enumerate(deck, 1):
+            print(f"\n{n}. {title}  ({sum(len(s.split()) for s in says)} words)")
+            for s in says:
+                w = len(s.split())
+                print(f"   {mp3(s, c)[0].name}  {w:3d} w{'  LONG' if w > LONG else ''}  {s}")
+        return print(f"\n{len(deck)} slides, {len(sentences)} sentences, {words} words, about {words / WPM:.1f} min at {WPM} words per minute")
+    say = speech(sentences, c, c["embed"])
+    (MEDIA / "manifest.js").write_text("window.TALK = " + json.dumps(dict(lead=c["lead"], gap=c["gap"], tail=c["tail"], pre=0.2, say=say)) + ";\n")
+    seconds = sum(s["dur"] + c["gap"] for s in say) + len(deck) * (c["lead"] + c["tail"])
+    print(f"speech: {len(say)} sentences, {seconds / 60:.1f} min with pauses, voice {c['voice']}", flush=True)
+    subprocess.run(["quarto", "render", qmd.name], check=True)
+    html = qmd.with_suffix(".html")
+    if "--no-check" not in flags or "--shots" in flags:
+        n = check(html, seconds)
+        if "--shots" in flags:
+            shots(html, n)
+    print(f"talk: {html}  ({html.stat().st_size / 1e6:.1f} MB)")
+
+
+if __name__ == "__main__":
+    main()

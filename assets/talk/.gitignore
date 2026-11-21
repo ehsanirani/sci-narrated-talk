@@ -1,0 +1,8 @@
+build/
+media/audio/
+media/manifest.js
+talk.html
+talk_files/
+.quarto/
+__pycache__/
+_quarto_internal_scss_error.scss
