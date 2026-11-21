@@ -474,7 +474,8 @@ that key to reveal.js even where this talk uses it: ${kbd('reveal')} <kbd>?</kbd
       if (nh >= 0 && (nh !== h || nk !== k)) go(nh, nk);
     };
     deck.on('slidechanged', follow); deck.on('fragmentshown', follow); deck.on('fragmenthidden', follow);
-    addEventListener('hashchange', () => { const [a, b] = location.hash.slice(1).split('.').map(Number); if (a) go(a - 1, (b || 1) - 1); });
+    // (under ?shot a hash without a sentence means the slide's last one, as at start-up)
+    addEventListener('hashchange', () => { const [a, b] = location.hash.slice(1).split('.').map(Number); if (a) go(a - 1, (b || (SHOT ? 100 : 1)) - 1); });
   }
 
   return {

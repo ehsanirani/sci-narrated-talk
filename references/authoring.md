@@ -388,6 +388,8 @@ asks for a new file. This path is described, not tested with another engine.
   (an image, a font, a script); download it into the talk's directory.
 - **A broken `:::` block**: a `{{< meta ... >}}` shortcode at the very end of the line
   before a closing `:::` swallows the line break. Put a full stop or a space after it.
+- **Screenshots** are taken by a browser that the build drives slide by slide and that
+  waits for fonts and clips; a clip is shown at the end of the sentence.
 - **No `chromium` on the PATH**: the check and `--shots` need Chromium or Chrome;
   `--no-check` builds without them.
 - **`quarto preview`** works for layout, with the narration of the last build.

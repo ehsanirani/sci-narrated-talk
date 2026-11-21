@@ -44,7 +44,6 @@ import subprocess
 import sys
 import types
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 VERSION = "0.2.0"  # of the skill; the player (narrate.js) carries the same number
@@ -384,14 +383,72 @@ def check(html, seconds, theme=None):
     return log
 
 
+class Browser:
+    """Headless Chromium driven over its DevTools pipe (no extra package): one page, moved from slide to slide, and a
+    screenshot of each once its fonts and clips are ready. A screenshot taken at start-up does not wait for a clip."""
+
+    def __init__(self, size):
+        import fcntl
+        import tempfile
+
+        exe = next((e for e in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable") if shutil.which(e)), None)
+        if not exe:
+            sys.exit("no chromium or google-chrome on the PATH: the screenshots need one")
+        fds = [fcntl.fcntl(f, fcntl.F_DUPFD, 10) for pair in (os.pipe(), os.pipe()) for f in pair]  # clear of 3 and 4
+        (r1, w1, r2, w2), self.n, self.buf = fds, 0, b""
+        self.w, self.r = w1, r2
+        self.p = subprocess.Popen(
+            [exe, "--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--host-resolver-rules=MAP * ~NOTFOUND",
+             "--remote-debugging-pipe", "--autoplay-policy=no-user-gesture-required", f"--user-data-dir={tempfile.mkdtemp()}",
+             "about:blank"], preexec_fn=lambda: (os.dup2(r1, 3), os.dup2(w2, 4)), pass_fds=(3, 4),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os.close(r1), os.close(w2)
+        tid = self.call("Target.createTarget", url="about:blank")["targetId"]
+        self.sid = self.call("Target.attachToTarget", targetId=tid, flatten=True)["sessionId"]
+        w, h = map(int, size.split("x"))
+        self.call("Emulation.setDeviceMetricsOverride", width=w, height=h, deviceScaleFactor=1, mobile=False)
+
+    def call(self, method, **params):
+        self.n += 1
+        msg = dict(id=self.n, method=method, params=params) | ({"sessionId": self.sid} if hasattr(self, "sid") else {})
+        os.write(self.w, json.dumps(msg).encode() + b"\0")
+        while True:
+            while b"\0" not in self.buf:
+                self.buf += os.read(self.r, 1 << 20)
+            raw, self.buf = self.buf.split(b"\0", 1)
+            m = json.loads(raw)
+            if m.get("id") == self.n:
+                return m.get("result", {})
+
+    def js(self, expr):
+        return self.call("Runtime.evaluate", expression=expr, awaitPromise=True, returnByValue=True).get("result", {}).get("value")
+
+    def shot(self, path):
+        self.js("new Promise(r => { const t = Date.now(), vs = [...document.querySelectorAll('.present video')];"
+                " (function w() { vs.every(v => v.readyState >= 2 && !v.seeking) || Date.now() - t > 6000"
+                " ? document.fonts.ready.then(() => setTimeout(r, 250)) : setTimeout(w, 50); })(); })")
+        Path(path).write_bytes(base64.b64decode(self.call("Page.captureScreenshot", format="png")["data"]))
+
+    def close(self):
+        self.p.terminate()
+        self.p.wait()
+
+
 def shots(html, log, every=False, size="1280x720"):
     """A screenshot of every slide at its last sentence (and, with every, of every sentence); log is check()'s result."""
-    out, n, win = BUILD / "shots", log[-1][0], "--window-size=" + size.replace("x", ",")
+    out, n = BUILD / "shots", log[-1][0]
     (out / "all").mkdir(parents=True, exist_ok=True)
     files = [out / f"{i:02d}.png" for i in range(1, n + 1)]
     jobs = [(f"#{i}", f) for i, f in enumerate(files, 1)] + ([(f"#{a}.{b}", out / "all" / f"{a:02d}-{b}.png") for a, b in log] if every else [])
-    with ThreadPoolExecutor(4) as ex:
-        list(ex.map(lambda j: chromium(win, "--virtual-time-budget=4000", f"--screenshot={j[1]}", f"{html.resolve().as_uri()}?shot{j[0]}"), jobs))
+    b = Browser(size)
+    try:
+        b.call("Page.navigate", url=f"{html.resolve().as_uri()}?shot")
+        b.js("new Promise(r => { (function w() { window.Reveal && Reveal.isReady() && document.body.dataset.log ? r() : setTimeout(w, 50); })(); })")
+        for pos, f in jobs:
+            b.js(f"location.hash = {pos!r}, new Promise(r => setTimeout(r, 60))")
+            b.shot(f)
+    finally:
+        b.close()
     if every:
         print(f"shots: {len(log)} sentences in {out}/all/")
     try:
