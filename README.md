@@ -32,7 +32,6 @@ only video. Use the narrated talk otherwise.
 skill=~/.claude/skills/sci-narrated-talk
 cp -rL --no-preserve=mode $skill/assets/talk mytalk
 cp -L --no-preserve=mode $skill/scripts/narrate.py mytalk/
-cp -rL --no-preserve=mode $skill/../sci-talk/assets/quarto-deck/theme mytalk/
 cd mytalk
 uv run --no-project --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib --with pillow \
     python narrate.py --shots
@@ -41,7 +40,7 @@ chromium talk.html
 
 The copies need `-L` because the installed skill is a tree of read-only links into the
 Nix store. The first build downloads the voice model (340 MB) to `~/.cache/kokoro/`.
-The starter is a six-slide talk about a random walk, 1.4 minutes, 6 MB as one file.
+The starter is a six-slide talk about a random walk, 1.4 minutes, 6.4 MB as one file.
 
 ## How a talk is written
 
@@ -113,46 +112,61 @@ and the voice alike. `references/authoring.md` has the full syntax.
   keeps its meaning. In the speaker view (S) the notes are the slide's narration and
   the previews stay silent.
 
+## Themes
+
+![One slide of the starter in the nine themes](docs/themes.png)
+
+`narrate: theme:` in the front matter picks one of `light` (default), `dark`, `paper`,
+`sci-talk`, `sea`, `journal`, `chalk`, `midnight`, `contrast`, or takes colours of your
+own on a base: `{base: light, accent: "#0b7285"}`. They are the nine themes of
+`sci-video-talk`, so a video and a narrated talk of one story can match.
+
+A theme is eight colours and a font. The build hands them to the slides (as SCSS and
+as CSS variables) and to `figures.py` (as `C.blue`, `C.accent`, ... and as matplotlib's
+defaults), so text, equations and drawn figures change together. The font is carried
+inside the talk. Clips and pasted images keep their own colours.
+
 ## What is in the skill
 
 ```
 sci-narrated-talk/
 ├── SKILL.md                      # the instructions Claude follows
 ├── README.md                     # this file
-├── docs/player.png
+├── docs/                         # the two pictures of this file
 ├── references/authoring.md       # say blocks, figures, numbers, clips, settings, player, failures
 ├── scripts/narrate.py            # the build: figures, speech, manifest, render, check, screenshots
 └── assets/talk/                  # the starter talk
     ├── talk.qmd                  # slides and narration
     ├── figures.py                # numbers and drawings
     ├── .gitignore
+    ├── theme/narrated-talk.scss  # the look: the videos' layout, driven by the theme's eight colours
     └── _extensions/narrate/      # the reveal.js plugin (Quarto extension)
         ├── _extension.yml
         ├── narrate.js            # player, timeline, outline, pointers, growing paths
         └── narrate.css
 ```
 
-The theme is not duplicated here: a talk copies `sci-talk`'s `ehsan-sci-theme.scss`.
-
 ## How it works
 
-1. **`figures.py`** writes `build/values.yml` and `build/fig/*.html`. A figure is
+1. **Theme.** `narrate.py` resolves `narrate: theme:` to eight colours and a font,
+   checks their contrast, and writes `build/theme.scss` (with the font inside).
+2. **`figures.py`** writes `build/values.yml` and `build/fig/*.html`. A figure is
    matplotlib's SVG with its ids made unique per figure; a part named
    `gid="s2-fit"` is turned into a reveal.js fragment that belongs to sentence 2.
-2. **Speech.** `narrate.py` collects the `say` sentences in document order and speaks
+3. **Speech.** `narrate.py` collects the `say` sentences in document order and speaks
    each one with Kokoro into `media/audio/<name>.mp3`. The name is a hash of the voice,
    the speed and the text as spoken, so unchanged sentences are never spoken twice.
-3. **Manifest.** `media/manifest.js` lists, per sentence, the audio (inside the file
+4. **Manifest.** `media/manifest.js` lists, per sentence, the audio (inside the file
    as base64, or a path), its length, and its letters and digits. The lengths are the
    talk's clock.
-4. **Render.** `quarto render` builds `talk.html` with everything embedded.
-5. **In the browser**, the plugin turns each slide's `say` blocks into hidden reveal.js
+5. **Render.** `quarto render` builds `talk.html` with everything embedded.
+6. **In the browser**, the plugin turns each slide's `say` blocks into hidden reveal.js
    fragments and makes what follows a block a fragment with the same index. Reveal's
    own position (slide, fragment) is therefore always "sentence k of slide n", and the
    plugin only has to play the right audio file and advance. It compares each
    sentence's text with the manifest and says so on the start overlay when the page
    was rendered with older narration.
-6. **Check.** `narrate.py` opens the page in headless Chromium with the network cut and
+7. **Check.** `narrate.py` opens the page in headless Chromium with the network cut and
    `?fast` (no sound, 50 times the speed), and fails the build unless every sentence
    was reached in order, every equation is rendered, nothing reaches outside its slide,
    nothing stays hidden, and nothing is loaded from a URL.
@@ -163,6 +177,8 @@ The theme is not duplicated here: a talk copies `sci-talk`'s `ehsan-sci-theme.sc
   `matplotlib`, optionally `pillow` for contact sheets)
 - Quarto 1.4 or newer (built and tested with 1.10.19)
 - Chromium or Chrome on the PATH, for the check and the screenshots only
+- the theme's font installed on the build machine (Source Sans 3; IBM Plex Serif for
+  `journal`); without it the talk falls back to the viewer's system font
 - no ffmpeg, no node, no network after the first download of the voice model
 
 ## Tested
@@ -175,6 +191,8 @@ On the starter talk and on variants of it, in headless Chromium on Linux:
 - Alt+click on a figure part replays its sentence; the outline and the timeline follow;
 - a clip running on the slide's clock, a silent step, a slide without narration;
 - speech inside the page and speech in files beside it;
+- all nine themes: each builds and passes the check, and the embedded font loads with
+  the network cut;
 - the check failing on purpose: content hidden behind the author's own pause, and
   narration changed after the last build.
 
@@ -187,7 +205,7 @@ developed on a 22-slide, 15-minute research talk before it was generalised here.
 - **Other browsers.** Firefox, Safari and touch devices are untried.
 - **The speaker view as a real window.** Its previews were tested as pages, not as the
   pop-up reveal.js opens.
-- **A long talk as one file.** The starter is 6 MB, of which about 5 MB is the empty
+- **A long talk as one file.** The starter is 6.4 MB, of which about 5 MB is the empty
   deck. Fifteen minutes of speech add about 10 MB; that size is an estimate.
 - **A recorded voice or another speech engine.** The file-by-file replacement is
   described in `references/authoring.md` and follows from how files are named; it has
@@ -195,6 +213,7 @@ developed on a 22-slide, 15-minute research talk before it was generalised here.
 - **Video export.** Recording the page to an `.mp4` is the planned next step, so that
   the talk becomes the single source of both forms. Until then, a video is made with
   `sci-video-talk`.
-- **The video engine's colour themes.** The look is a Quarto theme. Figures and clips
-  carry their own colours, so a different theme restyles the text only.
+- **Themes in the browser.** The theme is chosen at build time; the viewer cannot
+  switch it. Clips and pasted images do not follow it.
+- **A custom theme.** The contrast check was run on the nine built-in themes only.
 - **Vertical slide stacks beyond section dividers**, a two-voice dialogue, music.

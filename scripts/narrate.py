@@ -17,7 +17,9 @@ The steps, in order:
 
 Settings, in the deck's front matter (all optional):
     narrate: {voice: af_heart, speed: 1.0, lang: en-us, lead: 0.7, gap: 0.4, tail: 1.0, spoken: {"Péclet": "Pay-clay"},
-              embed: true}
+              embed: true, theme: light}
+theme: one of THEMES below, or colours of your own on a base, {base: light, accent: "#0b7285"}. The build writes it to
+build/theme.scss for the slides and to `C` (and matplotlib's defaults) for figures.py.
 embed: the speech goes into talk.html (one file to send); false leaves it in media/audio/ beside the page.
 An mp3 that already exists in media/audio/ under a sentence's name is used as it is, so a recorded voice or another
 speech engine can replace Kokoro file by file (`--script` prints the names).
@@ -32,6 +34,7 @@ import runpy
 import shutil
 import subprocess
 import sys
+import types
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -42,6 +45,30 @@ KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/mode
 LANG = {"a": "en-us", "b": "en-gb", "e": "es", "f": "fr-fr", "h": "hi", "i": "it", "j": "ja", "p": "pt-br", "z": "cmn"}
 SAY = re.compile(r"^:::+ *(?:\{[^}\n]*\.say\b[^}\n]*\}|say) *\n(.*?)^:::+ *$", re.M | re.S)
 BUILD, MEDIA = Path("build"), Path("media")
+THEMES = {  # bg, ink (text), muted (small print), light (rules), accent (title rule, bullets, pointers), three series
+    "light": dict(bg="#ffffff", ink="#1d2433", muted="#6b7280", light="#d9dde3", accent="#e8663d", blue="#2b74d6",
+                  green="#12a37a", purple="#7b5ea7"),
+    "dark": dict(bg="#11151c", ink="#e9edf3", muted="#9aa4b2", light="#2b3340", accent="#ff8757", blue="#6aa9ff",
+                 green="#35c99a", purple="#b497e6"),
+    "paper": dict(bg="#faf6ee", ink="#2b2622", muted="#7b7268", light="#e2d9c8", accent="#b5451b", blue="#2f5f8f",
+                  green="#3b7d5c", purple="#6d4f8f"),
+    "sci-talk": dict(bg="#ffffff", ink="#1e293b", muted="#64748b", light="#e5e7eb", accent="#6366f1", blue="#3b82f6",
+                     green="#16a34a", purple="#e11d48"),  # the sci-talk deck theme; the third series is rose
+    "chalk": dict(bg="#20352f", ink="#f2efe4", muted="#a9b8ae", light="#375049", accent="#ffd166", blue="#8ecbff",
+                  green="#9be38f", purple="#e3a8f0"),  # a blackboard
+    "midnight": dict(bg="#0b1f3a", ink="#eef3fb", muted="#9db0cc", light="#1f3558", accent="#ffb703", blue="#5cc8ff",
+                     green="#5fd3a0", purple="#c4a1ff"),
+    "journal": dict(bg="#ffffff", ink="#111111", muted="#5f6368", light="#d0d0d0", accent="#a61e2a", blue="#0072b2",
+                    green="#009e73", purple="#aa4499", font="IBM Plex Serif"),  # print look; the serif runs wider
+    "sea": dict(bg="#f3f8fa", ink="#102a33", muted="#5b7079", light="#cfdde2", accent="#0b7285", blue="#3b5bdb",
+                green="#2f9e44", purple="#ae3ec9"),
+    "contrast": dict(bg="#000000", ink="#ffffff", muted="#c4c4c4", light="#3a3a3a", accent="#ffd400", blue="#56b4e9",
+                     green="#3ddc97", purple="#d59bff"),  # for a weak projector
+}  # the same nine as sci-video-talk's video_engine.py
+FONT = "Source Sans 3"
+GLYPHS = [(0x20, 0x17F), (0x370, 0x3FF), (0x2000, 0x20CF), (0x2100, 0x214F), (0x2190, 0x22FF), (0x25A0, 0x25FF),
+          (0x27E8, 0x27E9)]  # what a font shipped in the talk keeps: Latin, Greek, punctuation, arrows, math, shapes
+C = types.SimpleNamespace()  # the theme's colours for figures.py: C.bg, C.ink, C.muted, C.light, C.accent, C.blue, ...
 
 
 # ---------------------------------------------------------------- for figures.py
@@ -78,6 +105,74 @@ def values(**kw):
     """Write build/values.yml: numbers the slides and the narration quote as {{< meta v.NAME >}}."""
     BUILD.mkdir(exist_ok=True)
     (BUILD / "values.yml").write_text("v:\n" + "".join(f"  {k}: {json.dumps(str(x))}\n" for k, x in kw.items()))
+
+
+# ---------------------------------------------------------------- theme
+def contrast(a, b):
+    lum = [0.2126 * r + 0.7152 * g + 0.0722 * bl for r, g, bl in
+           [[((c + 0.055) / 1.055) ** 2.4 if c > 0.04045 else c / 12.92 for c in
+             (int(x[i:i + 2], 16) / 255 for i in (1, 3, 5))] for x in (a, b)]]
+    return (max(lum) + 0.05) / (min(lum) + 0.05)
+
+
+def theme(spec):
+    """The eight colours and the font of `narrate: theme:`; fails on a theme that cannot be read."""
+    over = {k: v for k, v in spec.items() if k != "base"} if isinstance(spec, dict) else {}
+    base = spec.get("base", "light") if isinstance(spec, dict) else spec
+    if base not in THEMES:
+        sys.exit(f"unknown theme {base!r}: one of {', '.join(THEMES)}, or {{base: light, accent: \"#0b7285\"}}")
+    th = {"font": FONT} | THEMES[base] | over
+    low = [f"{k} on bg ({contrast(th[k], th['bg']):.1f}, needs {need})" for k, need in
+           dict(ink=7, muted=4, accent=3, blue=3, green=3, purple=3).items() if contrast(th[k], th["bg"]) < need]
+    if low:
+        sys.exit("theme: too little contrast: " + "; ".join(low))
+    return th
+
+
+def font_faces(family):
+    """@font-face rules carrying the font's regular, semibold and italic cuts (subset to GLYPHS), so that the talk
+    looks the same on a machine without the font. '' when this machine lacks the font or the tools."""
+    try:
+        import io
+
+        from fontTools import subset
+        from matplotlib import font_manager as fm
+    except ImportError:
+        return ""
+    css = ""
+    for weight, style in ((400, "normal"), (600, "normal"), (400, "italic")):
+        try:
+            path = fm.findfont(fm.FontProperties(family=family, weight=weight, style=style), fallback_to_default=False)
+        except ValueError:
+            print(f"theme: the font {family!r} is not installed here; the talk uses the viewer's system font")
+            return ""
+        opt = subset.Options()
+        font, sub, buf = subset.load_font(path, opt), subset.Subsetter(opt), io.BytesIO()
+        sub.populate(unicodes=[u for a, b in GLYPHS for u in range(a, b + 1)])
+        sub.subset(font)
+        font.save(buf)
+        css += (f'@font-face {{\n  font-family: "{family}";\n  font-weight: {weight};\n  font-style: {style};\n'
+                f'  src: url("data:font/ttf;base64,{base64.b64encode(buf.getvalue()).decode()}");\n}}\n')
+    return css
+
+
+def apply_theme(th, drawing):
+    """build/theme.scss for the slides; C and matplotlib's defaults for figures.py."""
+    C.__dict__.update(th)
+    BUILD.mkdir(exist_ok=True)
+    serif = "serif" in th["font"].lower() and "sans" not in th["font"].lower()
+    stack = f'"{th["font"]}", ' + ("Georgia, serif" if serif else 'system-ui, -apple-system, "Segoe UI", sans-serif')
+    (BUILD / "theme.scss").write_text(
+        "/*-- scss:defaults --*/\n" + "".join(f"${k}: {v};\n" for k, v in th.items() if k != "font")
+        + f"$font: unquote('{stack}');\n\n/*-- scss:rules --*/\n" + font_faces(th["font"]))
+    if drawing:
+        import matplotlib.pyplot as plt
+        from cycler import cycler
+
+        plt.rcParams.update({
+            "font.size": 13, "text.color": C.ink, "axes.labelcolor": C.ink, "axes.edgecolor": C.muted,
+            "xtick.color": C.muted, "ytick.color": C.muted, "grid.color": C.light, "axes.spines.top": False,
+            "axes.spines.right": False, "axes.prop_cycle": cycler(color=[C.blue, C.green, C.purple, C.accent])})
 
 
 # ---------------------------------------------------------------- the deck
@@ -148,7 +243,8 @@ def kokoro():
 
 
 def settings(meta):
-    c = dict(voice="af_heart", speed=1.0, lead=0.7, gap=0.4, tail=1.0, spoken={}, embed=True) | (meta.get("narrate") or {})
+    c = dict(voice="af_heart", speed=1.0, lead=0.7, gap=0.4, tail=1.0, spoken={}, embed=True, theme="light") | (
+        meta.get("narrate") or {})
     c.setdefault("lang", LANG.get(c["voice"][0], "en-us"))
     return c
 
@@ -250,9 +346,12 @@ def main():
         return print(" ".join(sorted(kokoro().get_voices())))
     qmd = Path(args[0] if args else "talk.qmd").resolve()
     os.chdir(qmd.parent)
-    if "--script" not in flags and Path("figures.py").exists():
-        sys.modules["narrate"] = sys.modules[__name__]  # figures.py does `from narrate import figure, values`
-        runpy.run_path("figures.py", run_name="__main__")
+    if "--script" not in flags:
+        th = theme(settings(read(qmd, strict=False)[0])["theme"])
+        apply_theme(th, Path("figures.py").exists())
+        if Path("figures.py").exists():
+            sys.modules["narrate"] = sys.modules[__name__]  # figures.py does `from narrate import figure, values, C`
+            runpy.run_path("figures.py", run_name="__main__")
     meta, body = read(qmd, strict="--script" not in flags)
     c, deck = settings(meta), slides(meta, body)
     sentences = [s for _, says in deck for s in says]
@@ -267,7 +366,8 @@ def main():
     say = speech(sentences, c, c["embed"])
     (MEDIA / "manifest.js").write_text("window.TALK = " + json.dumps(dict(lead=c["lead"], gap=c["gap"], tail=c["tail"], pre=0.2, say=say)) + ";\n")
     seconds = sum(s["dur"] + c["gap"] for s in say) + len(deck) * (c["lead"] + c["tail"])
-    print(f"speech: {len(say)} sentences, {seconds / 60:.1f} min with pauses, voice {c['voice']}", flush=True)
+    print(f"speech: {len(say)} sentences, {seconds / 60:.1f} min with pauses, voice {c['voice']}; theme "
+          f"{c['theme'] if isinstance(c['theme'], str) else 'custom'}", flush=True)
     subprocess.run(["quarto", "render", qmd.name], check=True)
     html = qmd.with_suffix(".html")
     if "--no-check" not in flags or "--shots" in flags:

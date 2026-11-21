@@ -11,6 +11,7 @@ below once.
 - [Pointers and growing paths](#pointers-and-growing-paths)
 - [Numbers: `values()`](#numbers-values)
 - [Figures: `figure()`](#figures-figure)
+- [Themes](#themes)
 - [Clips and images](#clips-and-images)
 - [Front matter](#front-matter)
 - [The player](#the-player)
@@ -130,10 +131,54 @@ width it fills.
 - Text in the figure stays text and takes the slide's font, so set sizes in points that
   work at the figure's `figsize` (13 or more for a figure that fills half a slide), and
   prefer plain Unicode ("Δr", "⟨Δr²⟩") over mathtext.
-- Colours: take them from the theme's palette and give each one meaning for the whole
-  talk; a colour named in the narration ("the orange arrow") must be that colour.
+- Colours: `from narrate import C` and draw with `C.blue`, `C.green`, `C.purple` (the
+  three series), `C.accent` (what the talk points at), `C.ink`, `C.muted`, `C.light`.
+  Text, axes and the colour cycle follow the theme already. Give each colour one
+  meaning for the whole talk.
 - An arrow that should appear by itself is a `FancyArrowPatch` with its own gid; an
   `annotate()` arrow cannot be named.
+
+## Themes
+
+```yaml
+narrate:
+  theme: dark                                   # a name
+  theme: {base: light, accent: "#0b7285"}       # or colours of your own on a base
+```
+
+| theme | look |
+|---|---|
+| `light` (default) | white, orange accent: the look of the videos |
+| `dark` | near-black, for a dark room or a screen recording |
+| `paper` | warm off-white, muted colours |
+| `sci-talk` | the `sci-talk` deck's palette: white, indigo accent |
+| `sea` | pale blue-grey, teal accent |
+| `journal` | white, serif (IBM Plex Serif), print colours |
+| `chalk` | a blackboard |
+| `midnight` | dark blue, amber accent |
+| `contrast` | black and white with yellow, for a weak projector |
+
+They are the nine themes of `sci-video-talk`, so a video and a narrated talk of the
+same story can match. A theme is eight colours (`bg`, `ink`, `muted`, `light`,
+`accent`, `blue`, `green`, `purple`) and a `font`. The build fails on a custom theme
+whose text or series colours have too little contrast with the background.
+
+What follows the theme, and what does not:
+
+- **Slides**: `narrate.py` writes the colours and the font to `build/theme.scss`, which
+  `theme/narrated-talk.scss` reads. The colours are also CSS variables (`var(--accent)`
+  and so on) for a slide's own inline styles.
+- **Figures drawn in `figures.py`**: they are drawn again in the theme's colours at every
+  build, on a transparent background.
+- **The font**: its regular, semibold and italic cuts are put inside the talk (Latin,
+  Greek, punctuation, arrows and math signs only), so it looks the same on a machine
+  without the font. If the build machine lacks the font, the build says so and the
+  talk uses the viewer's system font.
+- **Not**: clips and pasted images. They keep their own colours and background; on a
+  dark theme a white figure from a paper stays a white card.
+- **Not**: the player's bar, which is always dark. The outline takes the theme.
+
+Changing the theme speaks nothing again; it redraws the figures and renders.
 
 ## Clips and images
 
@@ -159,11 +204,15 @@ narrate:
   gap: 0.4               # between sentences
   tail: 1.0              # after the last sentence, before the next slide
   embed: true            # speech inside talk.html; false: files in media/audio/
+  theme: light           # see Themes
   spoken:                # written: spoken; changes the speech, not the captions
     "Péclet": "Pay-clay"
 metadata-files: [build/values.yml]
 format:
   revealjs:
+    theme: [default, theme/narrated-talk.scss, build/theme.scss]   # keep this order
+    width: 1920
+    height: 1080
     embed-resources: true            # keep: this is what makes the page work offline
     self-contained-math: true
     html-math-method: katex
@@ -173,8 +222,8 @@ format:
 ```
 
 Everything under `narrate:` is optional. Changing the voice or the speed speaks every
-sentence again; the old files stay cached. The rest of the `revealjs` block is the
-`sci-talk` deck's; the theme, the canvas size and the slide number are set there.
+sentence again; the old files stay cached. The theme is laid out for the 1920 x 1080
+canvas; sizes on a slide are in `em`, where 1em is the body text.
 
 With `embed: false`, ship `talk.html` together with `media/`.
 

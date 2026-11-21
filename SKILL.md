@@ -29,6 +29,9 @@ Ask only for what the project does not already answer.
   typed in from memory.
 - **Voice**: default `af_heart` (Kokoro; `--voices` lists them). For samples to choose
   from, use `sci-video-talk`'s `--voices NAME ...`.
+- **Theme**: `light` (default), `dark`, `paper`, `sci-talk`, `sea`, `journal`, `chalk`,
+  `midnight`, `contrast`, or colours of the user's own. The same nine as
+  `sci-video-talk`; slides and drawn figures both follow it.
 - **One file or a folder**: one `talk.html` with the speech inside (default), or the
   speech beside the page (`narrate: {embed: false}`) for a long talk or one with clips.
 
@@ -40,14 +43,14 @@ skill's files are read-only links into the Nix store, so copy with `-L`:
 ```sh
 cp -rL --no-preserve=mode <this skill>/assets/talk <dir>
 cp -L --no-preserve=mode <this skill>/scripts/narrate.py <dir>/
-cp -rL --no-preserve=mode <this skill>/../sci-talk/assets/quarto-deck/theme <dir>/
 ```
 
 That is a complete six-slide talk that builds as it stands: `talk.qmd` (slides and
 narration), `figures.py` (numbers and drawings), `_extensions/narrate/` (the player),
-`theme/` (the `sci-talk` theme) and a `.gitignore`. Replace the content and keep the
-structure. `narrate.py` and `_extensions/` stay unedited, so that a fix in the skill can
-replace them. Read `references/authoring.md` before writing the first slide.
+`theme/narrated-talk.scss` (the look) and a `.gitignore`. Replace the content and keep
+the structure. `narrate.py`, `_extensions/` and `theme/` stay unedited, so that a fix in
+the skill can replace them; a talk's own style rules go in a further SCSS file at the
+end of the `theme:` list. Read `references/authoring.md` before writing the first slide.
 
 ## Commands
 
@@ -112,6 +115,10 @@ The rules of a talk nobody can interrupt, as in `sci-video-talk`:
   term. A slide whose sentences reveal nothing reads as a frozen frame.
 - **Terse, as in `sci-talk`**: the voice carries the explanation, so the slide carries
   only the claim, the figure and a few bullets.
+- **Colours come from the theme.** `figures.py` draws with `C.blue`, `C.accent` and so
+  on, never with a typed-in colour, and each colour keeps one meaning for the whole
+  talk. The voice names a colour ("the orange line") only when the theme is settled;
+  "the line", "the arrow" survive a change of theme.
 - **Every slide is numbered** (`slide-number: c/t` in the starter), so a question can
   name a slide; the address bar shows `#slide.sentence` and such a link opens there.
 - **Stage with `say` blocks only.** Reveal.js fragments and `. . .` pauses of the
@@ -141,14 +148,14 @@ project's own rules for where status and dated records go.
 ## Not built
 
 Say so when asked, rather than improvising: an `.mp4` from the talk (use
-`sci-video-talk` for a video); the video engine's colour themes (the look is a Quarto
-theme, `theme/*.scss`); speech engines other than Kokoro, except by dropping files into
+`sci-video-talk` for a video); switching the theme in the browser (it is chosen at
+build time); speech engines other than Kokoro, except by dropping files into
 `media/audio/`; a two-voice dialogue; background music.
 
 ## References
 
 - `references/authoring.md`: the `say` block and its attributes, the title slide, silent
-  steps, `figure()` and `values()`, clips, front-matter settings, the player's keys and
+  steps, `figure()` and `values()`, themes, clips, front-matter settings, the player's keys and
   URL switches, a recorded voice, what is cached. Read before writing the first slide.
 - `README.md`: what the pieces are and how they fit; read when something in the player
   or the build has to change.

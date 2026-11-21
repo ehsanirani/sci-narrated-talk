@@ -1,0 +1,283 @@
+/*-- scss:defaults --*/
+
+// narrated-talk: the look of the sci-video-talk videos as a Quarto reveal.js theme, for a 1920 x 1080 canvas.
+// Used as `theme: [default, theme/narrated-talk.scss, build/theme.scss]`. The eight colours and the font come from
+// build/theme.scss, which narrate.py writes from `narrate: theme:` in the deck's front matter; the values below are
+// the "light" theme, so the deck also renders without that file. Every colour in the rules is one of the eight.
+$bg: #ffffff !default; // slide background
+$ink: #1d2433 !default; // text
+$muted: #6b7280 !default; // small print, axes
+$light: #d9dde3 !default; // rules, table lines
+$accent: #e8663d !default; // title rule, bullets, pointers, takeaways
+$blue: #2b74d6 !default; // three series colours
+$green: #12a37a !default;
+$purple: #7b5ea7 !default;
+// the font stack; unquote() keeps the inner quotes in the CSS, and a family name with a digit is invalid without them
+$font: unquote('"Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif') !default;
+
+$font-family-sans-serif: $font !default;
+$body-bg: $bg !default;
+$body-color: $ink !default;
+$link-color: $blue !default;
+// Every em below is a fraction of the slide: 40px on a 1920px canvas is the video's body size. No rem: reveal.js
+// sets this size on .reveal, not on the page's root.
+$presentation-font-size-root: 40px !default;
+$presentation-heading-font: $font-family-sans-serif !default;
+$presentation-heading-color: $ink !default;
+$presentation-heading-font-weight: 600 !default;
+$presentation-h1-font-size: 2.1em !default;
+$presentation-h2-font-size: 1.5em !default;
+$presentation-h3-font-size: 1.1em !default;
+$code-block-font-size: 0.7em !default;
+
+/*-- scss:rules --*/
+
+// The palette as CSS variables: for the player (pointer, outline) and for inline styles on a slide.
+:root {
+  --bg: #{$bg};
+  --ink: #{$ink};
+  --muted: #{$muted};
+  --light: #{$light};
+  --accent: #{$accent};
+  --blue: #{$blue};
+  --green: #{$green};
+  --purple: #{$purple};
+}
+
+// ---------------------------------------------------------------- text
+.reveal .slides {
+  text-align: left;
+}
+
+// the slide's title: a claim, with the accent rule under it
+.reveal h2 {
+  margin: 0 0 0.65em;
+  padding-bottom: 0.12em;
+  border-bottom: 3.5px solid var(--accent);
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.reveal :is(p, ul, ol, blockquote) {
+  margin: 0 0 0.55em;
+  line-height: 1.3;
+}
+
+.reveal :is(strong, b) {
+  font-weight: 600;
+}
+
+// bullets carry the accent
+.reveal .slides section ul {
+  list-style: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.reveal .slides section ul li {
+  position: relative;
+  padding-left: 1.15em;
+  margin: 0 0 0.5em;
+  line-height: 1.25;
+}
+
+.reveal .slides section ul li::before {
+  content: "•";
+  position: absolute;
+  left: 0.1em;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.reveal ol {
+  padding-left: 1.2em;
+}
+
+.reveal :is(.column, .box, .takeaway) > :is(p, ul, ol):first-child {
+  margin-top: 0;
+}
+
+.reveal :is(.box, .takeaway) > :is(p, ul, ol):last-child {
+  margin-bottom: 0;
+}
+
+.reveal :is(img, video) {
+  max-width: 100%;
+  margin: 0;
+}
+
+.reveal .katex {
+  font-size: 1em;
+}
+
+.reveal .katex-display {
+  margin: 0.5em 0;
+}
+
+.reveal figcaption {
+  color: var(--muted);
+  font-size: 0.7em;
+}
+
+.reveal table {
+  font-size: 0.85em;
+  border-collapse: collapse;
+}
+
+.reveal table :is(th, td) {
+  padding: 0.25em 0.7em;
+  border-bottom: 1.5px solid var(--light);
+}
+
+.reveal table th {
+  font-weight: 600;
+  border-bottom-color: var(--muted);
+}
+
+// ---------------------------------------------------------------- title slide (built by Quarto from the front matter)
+#title-slide {
+  text-align: left;
+}
+
+#title-slide .title {
+  max-width: 21em;
+  margin: 0;
+  font-size: 2.1em;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+#title-slide .title::after {
+  content: "";
+  display: block;
+  width: 1.6em;
+  height: 5px;
+  margin: 0.45em 0 0.4em;
+  background: var(--accent);
+}
+
+#title-slide .subtitle {
+  max-width: 30em;
+  margin: 0;
+  color: var(--accent);
+  font-size: 1.3em;
+  line-height: 1.35;
+}
+
+#title-slide .quarto-title-authors,
+#title-slide .quarto-title-author,
+#title-slide .quarto-title-author-name,
+#title-slide .quarto-title-affiliation {
+  display: block;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  font-size: 1em;
+  line-height: 1.5;
+}
+
+#title-slide .quarto-title-authors {
+  margin-top: 1.8em;
+  font-size: 0.9em;
+}
+
+#title-slide .quarto-title-author-name {
+  font-weight: 600;
+}
+
+#title-slide .quarto-title-affiliation {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+// ---------------------------------------------------------------- section dividers
+// `# [01 · Background]{.eyebrow} The model in one picture {.divider .center}`
+.reveal section.divider {
+  text-align: center;
+}
+
+.reveal section.divider h1 {
+  margin: 0;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.reveal section.divider p {
+  color: var(--muted);
+}
+
+.reveal .eyebrow {
+  display: block;
+  margin-bottom: 0.9em;
+  color: var(--accent);
+  font-size: 0.4em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+// ---------------------------------------------------------------- boxes
+// The one-line "so what" of a slide: `::: {.takeaway}`.
+.reveal .takeaway {
+  display: inline-block;
+  margin: 0.5em 0 0;
+  padding: 0.4em 0.65em;
+  border: 2.8px solid var(--accent);
+  border-radius: 0.45em;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+// `::: {.box .model}`: the kind is a claim about the text.
+//   .model  an assumption        (blue)     .result  a result that holds   (green)
+//   .caveat a caveat             (accent)   .info    background, an aside  (purple)
+//   .prov   provenance, small    (muted; also the default)
+.reveal .box {
+  --k: var(--muted);
+  margin: 0.5em 0;
+  padding: 0.4em 0.65em;
+  border-left: 5px solid var(--k);
+  border-radius: 0.3em;
+  background: color-mix(in srgb, var(--k) 10%, transparent);
+  font-size: 0.8em;
+  line-height: 1.3;
+
+  &.model { --k: var(--blue); }
+  &.result { --k: var(--green); }
+  &.caveat { --k: var(--accent); }
+  &.info { --k: var(--purple); }
+  &.prov { font-size: 0.65em; }
+}
+
+// ---------------------------------------------------------------- small helpers
+.reveal .muted { color: var(--muted); }
+.reveal .accent { color: var(--accent); }
+.reveal .blue { color: var(--blue); }
+.reveal .green { color: var(--green); }
+.reveal .purple { color: var(--purple); }
+.reveal .small { font-size: 0.8em; }
+.reveal .note { color: var(--muted); font-size: 0.65em; }
+.reveal .center { text-align: center; }
+
+// ---------------------------------------------------------------- the frame: slide number (right), section (left, set by the player)
+.reveal .slide-number {
+  right: 2%;
+  bottom: 1.4%;
+  padding: 0;
+  background: none;
+  color: var(--ink);
+  font-family: $font-family-sans-serif;
+  font-size: clamp(10px, 1.05vw, 22px);
+  font-weight: 600;
+}
+
+.reveal .slide-number a {
+  color: inherit;
+}
+
+.reveal .progress {
+  color: var(--accent);
+}

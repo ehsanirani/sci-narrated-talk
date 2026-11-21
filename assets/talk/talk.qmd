@@ -10,19 +10,21 @@ author:
 title-slide-attributes:
   data-say: "Release a crowd of walkers from one point, and let each take random steps.|How far do they get? This short talk defines the quantity that answers that, and then measures it."
 # Voice and pauses (all optional). spoken: how to say what the speech engine misreads; the captions keep the text.
+# theme: light, dark, paper, sci-talk, sea, journal, chalk, midnight, contrast, or {base: light, accent: "#0b7285"}.
 narrate:
   voice: af_heart
   speed: 1.0
+  theme: light
   spoken:
     "4D": "four D"
 # Numbers computed by figures.py, quoted below as {{< meta v.NAME >}}.
 metadata-files: [build/values.yml]
 format:
   revealjs:
-    theme: [default, theme/ehsan-sci-theme.scss]
-    width: 980
-    height: 552
-    margin: 0.04
+    theme: [default, theme/narrated-talk.scss, build/theme.scss]
+    width: 1920
+    height: 1080
+    margin: 0.05
     slide-number: c/t
     show-slide-number: all
     transition: fade
@@ -60,7 +62,7 @@ Follow a single walker. Its path is erratic, and it returns again and again.
 One walker, {{< meta v.shown >}} steps of random direction and length.
 
 ::: {.say point="#walker-arrow"}
-After a time t it has moved by a displacement, the orange arrow.
+After a time t it has moved by a displacement, the arrow.
 :::
 
 Its **displacement** after a time $t$ is $\Delta\mathbf{r}(t)$.
@@ -103,13 +105,13 @@ Now the measurement.
 Here is the mean squared displacement of our {{< meta v.walkers >}} walkers, against time.
 :::
 
-- Blue: the average over {{< meta v.walkers >}} walkers
+- Points: the average over {{< meta v.walkers >}} walkers
 
 ::: {.say point="#msd-fit"}
 A straight line fits it. Its slope gives a diffusion constant of {{< meta v.D >}}.
 :::
 
-- Orange: a straight line through the origin
+- Line: a least-squares fit through the origin
 
 ::: say
 So in twice the time the crowd covers twice the area, and the measurement returns the constant we put in.
