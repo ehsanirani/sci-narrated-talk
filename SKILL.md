@@ -44,13 +44,16 @@ skill's files are read-only links into the Nix store, so copy with `-L`:
 
 ```sh
 cp -rL --no-preserve=mode <this skill>/assets/talk <dir>
-cp -L --no-preserve=mode <this skill>/scripts/narrate.py <dir>/
+cp -L --no-preserve=mode <this skill>/scripts/narrate.py <this skill>/scripts/record.py <dir>/
 ```
 
 That is a complete four-slide talk that builds as it stands: `talk.qmd` (slides and
 narration), `figures.py` (numbers and drawings), `_extensions/narrate/` (the player),
-`theme/narrated-talk.scss` (the look) and a `.gitignore`. Replace the content and keep
-the structure. `narrate.py`, `_extensions/` and `theme/` stay unedited, so that a fix in
+`theme/narrated-talk.scss` (the look), `build.sh` (the build command), a `README.md` for
+whoever works on the talk by hand, and a `.gitignore`. Replace the content and keep
+the structure. The folder is the deliverable as much as the page: anyone can change
+`talk.qmd` or `figures.py` and run `sh build.sh`. Revise a talk the same way, in its
+source, never in `talk.html`. `narrate.py`, `record.py`, `_extensions/` and `theme/` stay unedited, so that a fix in
 the skill can replace them; a talk's own style rules go in a further SCSS file at the
 end of the `theme:` list. A talk works on its own copies: replace `narrate.py`,
 `_extensions/` and `theme/` together, never one of them, and not while the talk is
@@ -61,7 +64,8 @@ of different versions. Read `references/authoring.md` before writing the first s
 
 `NT` stands for
 `uv run --no-project --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib --with pillow python narrate.py`
-(add `--with` for what `figures.py` imports), run in the talk's directory. Write the
+(add `--with` for what `figures.py` imports, in `build.sh` too, which is the same
+command: `sh build.sh --shots`), run in the talk's directory. Write the
 command out: a shell variable holding it does not split in zsh.
 
 | command | does |
@@ -183,7 +187,8 @@ the check said; how the viewer steers it (space, arrows, T for the outline, `?` 
 rest); and plainly whether anyone has listened to the audio. The check proves that the
 talk runs, not that the voice is pleasant or a name sounds right.
 
-Record the build command in a short `README.md` beside the talk, and follow the
+Keep the talk's `README.md` and `build.sh` true (packages, anything the talk needs
+besides the standard build), and follow the
 project's own rules for where status and dated records go.
 
 ## Not built
