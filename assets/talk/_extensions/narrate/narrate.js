@@ -141,7 +141,8 @@ window.RevealNarrate = () => {
   // voice and the clock part by a little with each one. It loops unless it is about as long as what it accompanies
   // (data-once / data-loop decide otherwise); a clip that plays once holds its last frame.
   function media(seek) {
-    const say = T.scenes[h].say, now = SHOT ? say[k].t0 + say[k].dur : k ? say[k].t0 - T.pre : 0;
+    const say = T.scenes[h].say, speaking = phase === 'say' && !FAST && say[k].src;
+    const now = SHOT ? say[k].t0 + say[k].dur : speaking ? say[k].t0 + audio.currentTime : k ? say[k].t0 - T.pre : 0;
     slides[h].querySelectorAll('video').forEach(v => {
       const go = () => {
         const k0 = +(v.closest('[data-k]')?.dataset.k || 0), own = v.dataset.clock === 'sentence';
@@ -197,6 +198,7 @@ window.RevealNarrate = () => {
     if (FAST || !s.src) return wait(s.dur, done);  // a silent step only takes its time
     audio.src = s.src;
     audio.onended = () => my === tok && done();
+    audio.onplaying = () => my === tok && media(true);  // the voice has started: put the clips on its time
     audio.play().catch(() => { playing = false; ui(); });
   }
   function done() {
@@ -525,7 +527,11 @@ that key to reveal.js even where this talk uses it: ${kbd('reveal')} <kbd>?</kbd
       if (q.get('voice') === 'off') $('#nar-voice').click();
       if (q.get('cc') === 'on') $('#nar-capt').click();
       if (q.get('auto') === 'off') $('#nar-auto').click();
-      audio.ontimeupdate = () => { body.dataset.audio = `${h + 1}.${k + 1}@${audio.currentTime.toFixed(1)}`; };
+      audio.ontimeupdate = () => {  // for checks: where the voice is, and how far the slide's first clip is from it
+        body.dataset.audio = `${h + 1}.${k + 1}@${audio.currentTime.toFixed(1)}`;
+        const v = slides[h].querySelector('video:not([data-clock])');
+        if (v && v.duration) body.dataset.clip = (v.currentTime - (T.scenes[h].say[k].t0 + audio.currentTime) % v.duration).toFixed(2);
+      };
       deck.on('ready', () => {
         deck.sync(); deck.layout();
         document.fonts?.ready.then(() => fit(slides[h]));
