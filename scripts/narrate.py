@@ -400,8 +400,9 @@ class Browser:
         self.p = subprocess.Popen(
             [exe, "--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--host-resolver-rules=MAP * ~NOTFOUND",
              "--remote-debugging-pipe", "--autoplay-policy=no-user-gesture-required", f"--user-data-dir={tempfile.mkdtemp()}",
-             "about:blank"], preexec_fn=lambda: (os.dup2(r1, 3), os.dup2(w2, 4)), pass_fds=(3, 4),
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+             "about:blank"], preexec_fn=lambda: (os.dup2(r1, 3), os.dup2(w2, 4)), close_fds=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # the browser reads commands on 3 and answers on 4;
+        # not pass_fds=(3, 4): that asks for 3 and 4 to be open here already, which a plain shell does not give
         os.close(r1), os.close(w2)
         tid = self.call("Target.createTarget", url="about:blank")["targetId"]
         self.sid = self.call("Target.attachToTarget", targetId=tid, flatten=True)["sessionId"]
