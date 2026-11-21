@@ -10,7 +10,8 @@ author:
 title-slide-attributes:
   data-say: "Release a crowd of walkers from one point, and let each take random steps.|How far do they get? This short talk defines the quantity that answers that, and then measures it."
 # Voice and pauses (all optional). spoken: how to say what the speech engine misreads; the captions keep the text.
-# theme: light, dark, paper, sci-talk, sea, journal, chalk, midnight, contrast, or {base: light, accent: "#0b7285"}.
+# theme: the one the talk opens in: light, dark, paper, sci-talk, sea, journal, chalk, midnight, contrast, or
+# {base: light, accent: "#0b7285"}. The viewer can switch between all of them with the Y key.
 narrate:
   voice: af_heart
   speed: 1.0
@@ -24,12 +25,12 @@ format:
     theme: [default, theme/narrated-talk.scss, build/theme.scss]
     width: 1920
     height: 1080
-    margin: 0.05
+    margin: 0
     slide-number: c/t
     show-slide-number: all
     transition: fade
     transition-speed: fast
-    progress: false
+    progress: true
     controls: false
     menu: false
     html-math-method: katex
@@ -87,6 +88,10 @@ Diffusion in two dimensions: $\langle\Delta r^2\rangle = 4Dt$
 :::
 :::
 
+::: {.note}
+Simulated walkers: independent Gaussian steps, D = {{< meta v.D0 >}} in units of step length squared per step.
+:::
+
 # [02 · The measurement]{.eyebrow} Do the walkers follow it? {.divider .center}
 
 ::: say
@@ -125,6 +130,10 @@ The slope returns the $D$ we put in: {{< meta v.D >}} against {{< meta v.D0 >}}
 :::
 :::
 
+::: {.note}
+{{< meta v.walkers >}} simulated walkers, {{< meta v.steps >}} steps, one seed; the line is a least-squares fit.
+:::
+
 ## Summary: the reach grows as the square root of time
 
 ::: say
@@ -145,6 +154,6 @@ The typical distance is its square root. A random walker's reach therefore grows
 
 - Its square root, the typical distance, grows only as the square root of time
 
-::: {.box .model}
-Simulated walkers: independent Gaussian steps, one seed. In a real talk, say here what the pictures are made from.
+::: {.note}
+In a real talk, a note like this one says what the pictures are made from.
 :::

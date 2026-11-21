@@ -26,7 +26,7 @@ D = slope / 4
 # fail the build if a quoted number or a qualitative word of the narration no longer follows from the data
 assert abs(D - D0) < 0.05 * D0, "the narration says the measured D returns the one put in"
 assert 1.8 < msd[399] / msd[199] < 2.2, "'twice the time, twice the area'"
-values(D=f"{D:.2f}", D0=D0, walkers=WALKERS, shown=SHOWN)
+values(D=f"{D:.2f}", D0=D0, walkers=WALKERS, steps=STEPS, shown=SHOWN)
 
 # ---------------------------------------------------------------- drawings
 # one walker: the path is drawn while sentence 1 is spoken (grow="#walker-path"), the arrow comes with sentence 2

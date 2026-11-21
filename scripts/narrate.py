@@ -18,8 +18,9 @@ The steps, in order:
 Settings, in the deck's front matter (all optional):
     narrate: {voice: af_heart, speed: 1.0, lang: en-us, lead: 0.7, gap: 0.4, tail: 1.0, spoken: {"Péclet": "Pay-clay"},
               embed: true, theme: light}
-theme: one of THEMES below, or colours of your own on a base, {base: light, accent: "#0b7285"}. The build writes it to
-build/theme.scss for the slides and to `C` (and matplotlib's defaults) for figures.py.
+theme: one of THEMES below, or colours of your own on a base, {base: light, accent: "#0b7285"}. It is the theme the
+talk opens in; all of THEMES travel in the page and the viewer can switch between them (key Y, or ?theme=dark in the
+address). Figures drawn with `C` follow, because figure() writes the theme's colours into the SVG by name.
 embed: the speech goes into talk.html (one file to send); false leaves it in media/audio/ beside the page.
 An mp3 that already exists in media/audio/ under a sentence's name is used as it is, so a recorded voice or another
 speech engine can replace Kokoro file by file (`--script` prints the names).
@@ -69,6 +70,7 @@ FONT = "Source Sans 3"
 GLYPHS = [(0x20, 0x17F), (0x370, 0x3FF), (0x2000, 0x20CF), (0x2100, 0x214F), (0x2190, 0x22FF), (0x25A0, 0x25FF),
           (0x27E8, 0x27E9)]  # what a font shipped in the talk keeps: Latin, Greek, punctuation, arrows, math, shapes
 C = types.SimpleNamespace()  # the theme's colours for figures.py: C.bg, C.ink, C.muted, C.light, C.accent, C.blue, ...
+PALETTES = {}  # what the page can switch between: name -> the eight colours and the font stack
 
 
 # ---------------------------------------------------------------- for figures.py
@@ -86,6 +88,11 @@ def figure(fig, name):
     plt.close(fig)
     s = buf.getvalue()
     s = re.sub(r"<metadata>.*?</metadata>\s*", "", s[s.index("<svg"):], flags=re.S)
+    # a colour of the theme is written by its name, so that the figure follows a change of theme in the browser
+    names = {}
+    for k in ("ink", "muted", "light", "accent", "blue", "green", "purple", "bg"):
+        names.setdefault(str(getattr(C, k, "")).lower(), k)
+    s = re.sub(r"#[0-9a-fA-F]{6}\b", lambda m: f"var(--{names[m.group(0).lower()]})" if m.group(0).lower() in names else m.group(0), s)
 
     def ident(m):
         k, part = re.fullmatch(r"(?:s(\d+)-)?(.+)", m.group(1)).groups()
@@ -156,23 +163,34 @@ def font_faces(family):
     return css
 
 
-def apply_theme(th, drawing):
-    """build/theme.scss for the slides; C and matplotlib's defaults for figures.py."""
+def stack(font):
+    serif = "serif" in font.lower() and "sans" not in font.lower()
+    return f'"{font}", ' + ("Georgia, serif" if serif else 'system-ui, -apple-system, "Segoe UI", sans-serif')
+
+
+def apply_theme(spec, drawing):
+    """The talk's theme: build/theme.scss for the slides (its values, and the fonts of every theme), PALETTES for the
+    page's theme switch, C and matplotlib's defaults for figures.py. Returns the theme's name."""
+    name = spec if isinstance(spec, str) else "custom"
+    all_ = {n: theme(n) for n in THEMES} | {name: theme(spec)}
+    th = all_[name]
     C.__dict__.update(th)
+    PALETTES.update({n: {k: v for k, v in t.items() if k != "font"} | {"font": stack(t["font"])} for n, t in all_.items()})
     BUILD.mkdir(exist_ok=True)
-    serif = "serif" in th["font"].lower() and "sans" not in th["font"].lower()
-    stack = f'"{th["font"]}", ' + ("Georgia, serif" if serif else 'system-ui, -apple-system, "Segoe UI", sans-serif')
     (BUILD / "theme.scss").write_text(
         "/*-- scss:defaults --*/\n" + "".join(f"${k}: {v};\n" for k, v in th.items() if k != "font")
-        + f"$font: unquote('{stack}');\n\n/*-- scss:rules --*/\n" + font_faces(th["font"]))
+        + f"$font: unquote('{stack(th['font'])}');\n\n/*-- scss:rules --*/\n"
+        + "".join(font_faces(f) for f in dict.fromkeys(t["font"] for t in all_.values())))
     if drawing:
         import matplotlib.pyplot as plt
         from cycler import cycler
 
         plt.rcParams.update({
             "font.size": 13, "text.color": C.ink, "axes.labelcolor": C.ink, "axes.edgecolor": C.muted,
-            "xtick.color": C.muted, "ytick.color": C.muted, "grid.color": C.light, "axes.spines.top": False,
+            "xtick.color": C.muted, "ytick.color": C.muted, "grid.color": C.light, "patch.edgecolor": C.ink,
+            "axes.spines.top": False,
             "axes.spines.right": False, "axes.prop_cycle": cycler(color=[C.blue, C.green, C.purple, C.accent])})
+    return name
 
 
 # ---------------------------------------------------------------- the deck
@@ -346,9 +364,9 @@ def main():
         return print(" ".join(sorted(kokoro().get_voices())))
     qmd = Path(args[0] if args else "talk.qmd").resolve()
     os.chdir(qmd.parent)
+    name = None
     if "--script" not in flags:
-        th = theme(settings(read(qmd, strict=False)[0])["theme"])
-        apply_theme(th, Path("figures.py").exists())
+        name = apply_theme(settings(read(qmd, strict=False)[0])["theme"], Path("figures.py").exists())
         if Path("figures.py").exists():
             sys.modules["narrate"] = sys.modules[__name__]  # figures.py does `from narrate import figure, values, C`
             runpy.run_path("figures.py", run_name="__main__")
@@ -364,10 +382,10 @@ def main():
                 print(f"   {mp3(s, c)[0].name}  {w:3d} w{'  LONG' if w > LONG else ''}  {s}")
         return print(f"\n{len(deck)} slides, {len(sentences)} sentences, {words} words, about {words / WPM:.1f} min at {WPM} words per minute")
     say = speech(sentences, c, c["embed"])
-    (MEDIA / "manifest.js").write_text("window.TALK = " + json.dumps(dict(lead=c["lead"], gap=c["gap"], tail=c["tail"], pre=0.2, say=say)) + ";\n")
+    (MEDIA / "manifest.js").write_text("window.TALK = " + json.dumps(dict(
+        lead=c["lead"], gap=c["gap"], tail=c["tail"], pre=0.2, theme=name, themes=PALETTES, say=say)) + ";\n")
     seconds = sum(s["dur"] + c["gap"] for s in say) + len(deck) * (c["lead"] + c["tail"])
-    print(f"speech: {len(say)} sentences, {seconds / 60:.1f} min with pauses, voice {c['voice']}; theme "
-          f"{c['theme'] if isinstance(c['theme'], str) else 'custom'}", flush=True)
+    print(f"speech: {len(say)} sentences, {seconds / 60:.1f} min with pauses, voice {c['voice']}; theme {name}", flush=True)
     subprocess.run(["quarto", "render", qmd.name], check=True)
     html = qmd.with_suffix(".html")
     if "--no-check" not in flags or "--shots" in flags:

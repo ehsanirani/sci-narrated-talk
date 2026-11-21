@@ -159,26 +159,42 @@ narrate:
 | `contrast` | black and white with yellow, for a weak projector |
 
 They are the nine themes of `sci-video-talk`, so a video and a narrated talk of the
-same story can match. A theme is eight colours (`bg`, `ink`, `muted`, `light`,
-`accent`, `blue`, `green`, `purple`) and a `font`. The build fails on a custom theme
-whose text or series colours have too little contrast with the background.
+same story can match. `narrate: theme:` is the theme the talk opens in. All nine (and
+a custom one) travel in the page, and the viewer moves to the next with the Y key or
+the bar's theme button, at any moment and without interrupting the voice;
+`talk.html?theme=dark` opens in one.
 
-What follows the theme, and what does not:
+How it works: a theme has no style rules. It is a set of values for nine names:
+eight colours (`--bg`, `--ink`, `--muted`, `--light`, `--accent`, `--blue`, `--green`,
+`--purple`) and `--font`. `theme/narrated-talk.scss` holds the layout, the frame of
+the videos (title bar with the accent rule, footer with section, talk title and slide
+number, progress bar), and every colour in it is one of those names. Switching a theme
+sets the nine values. The build fails on a custom theme whose text or series colours
+have too little contrast with the background.
 
-- **Slides**: `narrate.py` writes the colours and the font to `build/theme.scss`, which
-  `theme/narrated-talk.scss` reads. The colours are also CSS variables (`var(--accent)`
-  and so on) for a slide's own inline styles.
-- **Figures drawn in `figures.py`**: they are drawn again in the theme's colours at every
-  build, on a transparent background.
-- **The font**: its regular, semibold and italic cuts are put inside the talk (Latin,
-  Greek, punctuation, arrows and math signs only), so it looks the same on a machine
-  without the font. If the build machine lacks the font, the build says so and the
-  talk uses the viewer's system font.
+What follows a switch, and what does not:
+
+- **Slides**: everything styled by the theme file. On a slide of your own, use the
+  classes (`.accent`, `.blue`, `.muted`, ...) or `var(--accent)`; a typed-in colour
+  stays as it is.
+- **Figures drawn in `figures.py`**: `figure()` writes every colour that is one of the
+  theme's (`C.blue`, `C.ink`, ...) into the SVG by name. A colour typed in by hand, or
+  mixed from two theme colours in Python, stays fixed; make a tint with `alpha=`.
+- **The font**: the regular, semibold and italic cuts of every theme's font are put
+  inside the talk (Latin, Greek, punctuation, arrows and math signs only), so it looks
+  the same on a machine without them. If the build machine lacks a font, the build
+  says so and that theme uses the viewer's system font.
 - **Not**: clips and pasted images. They keep their own colours and background; on a
   dark theme a white figure from a paper stays a white card.
 - **Not**: the player's bar, which is always dark. The outline takes the theme.
+- **Not**: what the narration says. Never name a colour in a sentence or a bullet.
 
-Changing the theme speaks nothing again; it redraws the figures and renders.
+Changing `narrate: theme:` speaks nothing again; the build only renders.
+
+On a slide, three more things come from the frame: `::: {.note}` is the small print at
+the foot of the slide (what the picture is made from), `::: {.takeaway}` the boxed
+conclusion, and `::: {.box .model}` (`.result`, `.info`, `.prov`) the same box in
+another colour.
 
 ## Clips and images
 
@@ -213,6 +229,8 @@ format:
     theme: [default, theme/narrated-talk.scss, build/theme.scss]   # keep this order
     width: 1920
     height: 1080
+    margin: 0                        # the frame has its own margins
+    progress: true                   # the bar along the bottom edge, as in the videos
     embed-resources: true            # keep: this is what makes the page work offline
     self-contained-math: true
     html-math-method: katex
@@ -239,6 +257,7 @@ With `embed: false`, ship `talk.html` together with `media/`.
 | T | outline: sections, slides, the sentences of the current slide |
 | M | voice on / off; the talk keeps its pace |
 | A | auto-advance to the next slide on / off |
+| Y | next theme |
 | X | hide / show the bar |
 | ? | the list of keys and mouse actions |
 
@@ -256,6 +275,7 @@ URL switches, for checks and links:
 | `talk.html?shot#5` | slide 5 at its last sentence, no player, no transitions (screenshots) |
 | `talk.html?fast` | play through without sound at 50 times the speed (the build's check) |
 | `talk.html?autostart` | start without the click (works only where the browser allows sound unasked) |
+| `talk.html?theme=dark` | open in that theme; combines with the others (`?shot&theme=dark#5`) |
 | `talk.html?tl=sections` | force a timeline layout: `slides`, `sections` or `none` |
 
 A browser plays no sound before the first click or key press, hence the start overlay.

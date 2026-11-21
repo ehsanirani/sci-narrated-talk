@@ -14,16 +14,18 @@
  * Player: a bar over the bottom of the slide (fades when the mouse rests while playing) with a timeline (one segment per
  * slide, as wide as the slide is long; one per section when slides would be < 10 px; none on a phone), and an outline.
  * Keys: <- -> slide, up/down sentence, space pause/resume, C captions, T outline, M voice on/off, A auto-advance,
- * X hide the bar, ? help; nothing with Ctrl/Alt/Meta; every other key stays reveal's. Each button prints its key.
+ * Y next theme, X hide the bar, ? help; nothing with Ctrl/Alt/Meta; every other key stays reveal's. Each button prints its key.
  * Alt+click on an element replays the sentence that introduced it (data-k); Ctrl+click is reveal's zoom.
  * URL: #n.k = slide n, sentence k (1-based). ?fast: no audio, 50x speed; body[data-log] lists the visited positions,
  * body[data-over] what reaches outside its slide, body[data-done] the end. ?shot: no player, no transitions; #n alone
  * shows the slide's last sentence (for screenshots). ?tl=slides|sections|none forces a timeline mode.
+ * Themes: window.TALK.themes maps a name to the values of the theme's CSS variables (--bg, --ink, ..., --font), which
+ * are all the slides' styles and the figures refer to; ?theme=NAME opens in one, Y or the bar's button goes to the next.
  * In reveal's speaker view (S) the two previews follow the main window silently; the notes are the narration.
  */
 window.RevealNarrate = () => {
   let deck, T, N, slides, h = 0, k = 0, playing = false, auto = true, phase = 'idle', tok = 0, timer = null;
-  let D, S0, TOTAL, groups, secOf, SEC, items = [], built = -1, idleT;
+  let D, S0, TOTAL, groups, secOf, SEC, items = [], built = -1, idleT, theme;
   const opened = new Set();  // outline parts the viewer opened by hand (or that the browser's find opened)
   const q = new URLSearchParams(location.search), FAST = q.has('fast'), SHOT = q.has('shot'), TL = q.get('tl');
   const RECV = q.has('receiver');  // one of the two previews in reveal's speaker view (S): follows the main window, silent
@@ -62,6 +64,7 @@ window.RevealNarrate = () => {
     const s = says(h)[k], sec = slides[h];
     $('#nar-cap span').textContent = s ? s.textContent.trim() : '';
     $('#nar-sec').textContent = SEC[h];
+    deck.getRevealElement().classList.toggle('nar-bare', sec.matches('#title-slide, .divider'));  // no footer texts there
     $('#nar-num').textContent = `${h + 1} / ${N}`;
     if (built !== h) layout();
     syncOutline();
@@ -264,6 +267,7 @@ window.RevealNarrate = () => {
 <div id="nar-bar"><div id="nar-tl"><div id="nar-labs"></div><div id="nar-segs"></div><div id="nar-tip"></div></div>
 <div class="row"><button id="nar-play" title="play (space)">▶</button><kbd>space</kbd><span id="nar-time"></span><span id="nar-num"></span>
 <span class="sp"></span><button id="nar-voice" title="voice (M): off, the talk runs on silently at the same pace" aria-pressed="true">voice<kbd>M</kbd></button>
+<button id="nar-theme" title="next theme (Y)"><span></span><kbd>Y</kbd></button>
 <button id="nar-capt" title="captions (C)" aria-pressed="false">CC<kbd>C</kbd></button>
 <button id="nar-auto" title="auto-advance (A): go on to the next slide at the end of this one" aria-pressed="true">auto<kbd>A</kbd></button>
 <button id="nar-olb" title="outline (T)" aria-pressed="false">☰<kbd>T</kbd></button><button id="nar-helpb" title="keys and mouse (?)">?</button>
@@ -274,6 +278,7 @@ window.RevealNarrate = () => {
 <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>previous / next sentence</td></tr><tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>first / last slide</td></tr>
 <tr><td><kbd>C</kbd></td><td>captions</td></tr><tr><td><kbd>T</kbd></td><td>outline</td></tr>
 <tr><td><kbd>M</kbd></td><td>voice on / off; the talk keeps its pace</td></tr>
+<tr><td><kbd>Y</kbd></td><td>next theme (colours and font)</td></tr>
 <tr><td><kbd>A</kbd></td><td>auto-advance to the next slide on / off</td></tr><tr><td><kbd>X</kbd></td><td>hide / show the bar</td></tr><tr><td><kbd>?</kbd></td><td>this help</td></tr>
 <tr><td><kbd>F</kbd> <kbd>Esc</kbd> <kbd>F1</kbd></td><td>reveal.js: fullscreen, overview, all its keys</td></tr></table>
 <h3>Mouse</h3><table><tr><td>timeline</td><td>click a slide to jump to it; inside the current slide, to the sentence under the pointer</td></tr>
@@ -282,7 +287,9 @@ window.RevealNarrate = () => {
 <tr><td>Ctrl+click</td><td>zoom in (reveal.js); again to zoom out</td></tr><tr><td>click, drag</td><td>select text</td></tr></table>
 <p>Keys with Ctrl, Alt or Meta are left to the browser. Click anywhere to close.</p></div></div>
 <div id="nar-start"><div>▶&nbsp; Click or press space to start<small>${esc(body.dataset.error || '')}</small></div></div>`);
-    deck.getRevealElement().insertAdjacentHTML('beforeend', '<div id="nar-sec"></div><div id="nar-cap"><span></span></div>');
+    deck.getRevealElement().insertAdjacentHTML('beforeend', `<div id="nar-sec"></div><div id="nar-ttl">${esc(document.title)}</div><div id="nar-cap"><span></span></div>`);
+    $('#nar-theme').onclick = () => { const n = Object.keys(T.themes || {}); setTheme(n[(n.indexOf(theme) + 1) % n.length]); };
+    setTheme(T.themes?.[q.get('theme')] ? q.get('theme') : T.theme, !q.get('theme'));
     $('#nar-play').onclick = () => (started() ? toggle() : begin());
     $('#nar-auto').onclick = () => { auto = !auto; $('#nar-auto').setAttribute('aria-pressed', auto); };
     $('#nar-capt').onclick = () => $('#nar-capt').setAttribute('aria-pressed', body.classList.toggle('nar-captions'));
@@ -308,6 +315,14 @@ window.RevealNarrate = () => {
     addEventListener('mousemove', wake);
     addEventListener('resize', () => { layout(); syncOutline(); });
   }
+  // a theme is only values: set them on the page's root, and everything that names them follows
+  function setTheme(name, keep) {  // keep: the page was built in this theme, nothing to set
+    const th = (T.themes || {})[name];
+    $('#nar-theme').style.display = th ? '' : 'none';
+    if (!th) return;
+    theme = name; $('#nar-theme span').textContent = name; body.dataset.theme = name;
+    if (!keep) for (const [k, v] of Object.entries(th)) document.documentElement.style.setProperty('--' + k, v);
+  }
   function setOutline(v = !body.classList.contains('nar-outline')) {
     body.classList.toggle('nar-outline', v); $('#nar-olb').setAttribute('aria-pressed', v); syncOutline();
   }
@@ -330,6 +345,7 @@ window.RevealNarrate = () => {
     bind(65, 'A', 'auto-advance to the next slide on / off', () => $('#nar-auto').click());
     bind(77, 'M', 'voice on / off (the talk keeps its pace)', () => $('#nar-voice').click());
     // X acts on what is on screen: it hides a bar that shows, and brings back one that is hidden or has faded
+    bind(89, 'Y', 'next theme', () => $('#nar-theme').click());
     bind(88, 'X', 'hide / show the bar', idle => body.classList.toggle('nar-hidden', !idle && !body.classList.contains('nar-hidden')));
     const help = () => body.classList.toggle('nar-help');
     bind(191, '?', 'keys and mouse of the talk (F1: this list)', help); bind(63, '?', 'keys and mouse of the talk (Firefox)', help);

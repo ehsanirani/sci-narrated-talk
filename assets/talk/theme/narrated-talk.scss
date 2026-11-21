@@ -1,13 +1,17 @@
 /*-- scss:defaults --*/
 
-// narrated-talk: the look of the sci-video-talk videos as a Quarto reveal.js theme, for a 1920 x 1080 canvas.
-// Used as `theme: [default, theme/narrated-talk.scss, build/theme.scss]`. The eight colours and the font come from
-// build/theme.scss, which narrate.py writes from `narrate: theme:` in the deck's front matter; the values below are
-// the "light" theme, so the deck also renders without that file. Every colour in the rules is one of the eight.
+// narrated-talk: the frame of the sci-video-talk videos as a Quarto reveal.js theme, for a 1920 x 1080 canvas with
+// `margin: 0`. Used as `theme: [default, theme/narrated-talk.scss, build/theme.scss]`.
+//
+// This file holds the layout and nothing else. Every colour in its rules is a name (var(--bg), var(--ink),
+// var(--muted), var(--light), var(--accent), var(--blue), var(--green), var(--purple)) and the font is var(--font).
+// A theme is a set of values for those names and has no rules of its own, so the player can swap one theme for
+// another while the talk runs. The values below are the "light" theme; build/theme.scss, written by narrate.py from
+// `narrate: theme:`, replaces them with the talk's own, which is what the page shows before any switch.
 $bg: #ffffff !default; // slide background
 $ink: #1d2433 !default; // text
 $muted: #6b7280 !default; // small print, axes
-$light: #d9dde3 !default; // rules, table lines
+$light: #d9dde3 !default; // rules, table lines, the unfilled progress bar
 $accent: #e8663d !default; // title rule, bullets, pointers, takeaways
 $blue: #2b74d6 !default; // three series colours
 $green: #12a37a !default;
@@ -19,20 +23,20 @@ $font-family-sans-serif: $font !default;
 $body-bg: $bg !default;
 $body-color: $ink !default;
 $link-color: $blue !default;
-// Every em below is a fraction of the slide: 40px on a 1920px canvas is the video's body size. No rem: reveal.js
+// Every em below is a fraction of the slide: 36px on the 1920px canvas is the video's bullet size. No rem: reveal.js
 // sets this size on .reveal, not on the page's root.
-$presentation-font-size-root: 40px !default;
-$presentation-heading-font: $font-family-sans-serif !default;
+$presentation-font-size-root: 36px !default;
+$presentation-heading-font: $font !default;
 $presentation-heading-color: $ink !default;
 $presentation-heading-font-weight: 600 !default;
-$presentation-h1-font-size: 2.1em !default;
-$presentation-h2-font-size: 1.5em !default;
+$presentation-h1-font-size: 2.2em !default;
+$presentation-h2-font-size: 1.55em !default;
 $presentation-h3-font-size: 1.1em !default;
 $code-block-font-size: 0.7em !default;
 
 /*-- scss:rules --*/
 
-// The palette as CSS variables: for the player (pointer, outline) and for inline styles on a slide.
+// ---------------------------------------------------------------- the theme's values, and reveal.js's own colours
 :root {
   --bg: #{$bg};
   --ink: #{$ink};
@@ -42,26 +46,109 @@ $code-block-font-size: 0.7em !default;
   --blue: #{$blue};
   --green: #{$green};
   --purple: #{$purple};
+  --font: #{$font};
+
+  --r-background-color: var(--bg);
+  --r-main-color: var(--ink);
+  --r-heading-color: var(--ink);
+  --r-link-color: var(--blue);
+  --r-link-color-dark: var(--blue);
+  --r-link-color-hover: var(--blue);
+  --r-selection-background-color: var(--accent);
+  --r-selection-color: var(--bg);
+  --r-main-font: var(--font);
+  --r-heading-font: var(--font);
 }
 
-// ---------------------------------------------------------------- text
+body,
+.reveal-viewport {
+  background-color: var(--bg);
+}
+
+.reveal,
+.reveal :is(h1, h2, h3, h4) {
+  color: var(--ink);
+  font-family: var(--font);
+}
+
+.reveal a {
+  color: var(--blue);
+}
+
+// ---------------------------------------------------------------- the frame: title bar, content, footer
+// 96px (5 %) to the left and right, as in the video; the title sits at the top with the accent rule under it.
 .reveal .slides {
   text-align: left;
 }
 
-// the slide's title: a claim, with the accent rule under it
+// (not the stack that a section heading wraps around its slides)
+.reveal .slides section:not(:has(> section)) {
+  box-sizing: border-box;
+  padding: 44px 96px 0;
+}
+
 .reveal h2 {
-  margin: 0 0 0.65em;
-  padding-bottom: 0.12em;
+  margin: 0 0 1.05em;
+  padding-bottom: 0.2em;
   border-bottom: 3.5px solid var(--accent);
   line-height: 1.2;
   letter-spacing: 0;
   text-transform: none;
 }
 
+// The footer row scales with the slide: section (left) and talk title (right), both set by the player, and "n / N".
+// !important: reveal.js's and Quarto's own slide-number rules load after the theme.
+.reveal #nar-sec,
+.reveal #nar-ttl,
+.reveal .slide-number {
+  position: absolute !important;
+  top: auto !important;
+  bottom: 2.4% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: none !important;
+  color: var(--muted) !important;
+  font-family: var(--font) !important;
+  font-size: calc(24px * var(--slide-scale, 1)) !important;
+  line-height: 1 !important;
+}
+
+.reveal #nar-sec {
+  left: 5% !important;
+}
+
+.reveal #nar-ttl {
+  left: auto !important;
+  right: calc(5% + 4.6em) !important;
+}
+
+.reveal .slide-number {
+  left: auto !important;
+  right: 5% !important;
+  color: var(--ink) !important;
+  font-size: calc(26px * var(--slide-scale, 1)) !important;
+  font-weight: 600;
+}
+
+.reveal .slide-number a {
+  color: inherit;
+}
+
+// the title slide and the dividers are their own frame (the player marks them)
+.reveal.nar-bare :is(#nar-sec, #nar-ttl) {
+  visibility: hidden;
+}
+
+.reveal .progress {
+  height: calc(8px * var(--slide-scale, 1));
+  background: var(--light);
+  color: var(--accent);
+}
+
+// ---------------------------------------------------------------- text
 .reveal :is(p, ul, ol, blockquote) {
-  margin: 0 0 0.55em;
-  line-height: 1.3;
+  margin: 0 0 0.6em;
+  line-height: 1.4;
 }
 
 .reveal :is(strong, b) {
@@ -77,9 +164,9 @@ $code-block-font-size: 0.7em !default;
 
 .reveal .slides section ul li {
   position: relative;
-  padding-left: 1.15em;
-  margin: 0 0 0.5em;
-  line-height: 1.25;
+  padding-left: 1.25em;
+  margin: 0 0 0.75em;
+  line-height: 1.45;
 }
 
 .reveal .slides section ul li::before {
@@ -112,7 +199,8 @@ $code-block-font-size: 0.7em !default;
 }
 
 .reveal .katex-display {
-  margin: 0.5em 0;
+  margin: 0.6em 0;
+  font-size: 1.15em;
 }
 
 .reveal figcaption {
@@ -141,9 +229,9 @@ $code-block-font-size: 0.7em !default;
 }
 
 #title-slide .title {
-  max-width: 21em;
+  max-width: 19em;
   margin: 0;
-  font-size: 2.1em;
+  font-size: 2.2em;
   font-weight: 700;
   line-height: 1.15;
 }
@@ -158,10 +246,10 @@ $code-block-font-size: 0.7em !default;
 }
 
 #title-slide .subtitle {
-  max-width: 30em;
+  max-width: 26em;
   margin: 0;
   color: var(--accent);
-  font-size: 1.3em;
+  font-size: 1.35em;
   line-height: 1.35;
 }
 
@@ -179,7 +267,6 @@ $code-block-font-size: 0.7em !default;
 
 #title-slide .quarto-title-authors {
   margin-top: 1.8em;
-  font-size: 0.9em;
 }
 
 #title-slide .quarto-title-author-name {
@@ -188,7 +275,7 @@ $code-block-font-size: 0.7em !default;
 
 #title-slide .quarto-title-affiliation {
   color: var(--muted);
-  font-size: 0.85em;
+  font-size: 0.8em;
 }
 
 // ---------------------------------------------------------------- section dividers
@@ -219,37 +306,37 @@ $code-block-font-size: 0.7em !default;
 }
 
 // ---------------------------------------------------------------- boxes
-// The one-line "so what" of a slide: `::: {.takeaway}`.
+// The video's callout, the one-line "so what" of a slide: `::: {.takeaway}`.
 .reveal .takeaway {
   display: inline-block;
   margin: 0.5em 0 0;
-  padding: 0.4em 0.65em;
+  padding: 0.6em 0.7em;
   border: 2.8px solid var(--accent);
-  border-radius: 0.45em;
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius: 0.5em;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  font-size: 0.9em;
   font-weight: 600;
   line-height: 1.3;
 }
 
-// `::: {.box .model}`: the kind is a claim about the text.
-//   .model  an assumption        (blue)     .result  a result that holds   (green)
-//   .caveat a caveat             (accent)   .info    background, an aside  (purple)
-//   .prov   provenance, small    (muted; also the default)
+// `::: {.box .model}`: the same shape in another colour; the kind is a claim about the text.
+//   .model  an assumption  (blue)     .result  a result that holds  (green)
+//   .info   an aside       (purple)   .prov    provenance, small    (muted; also the default)
 .reveal .box {
   --k: var(--muted);
-  margin: 0.5em 0;
-  padding: 0.4em 0.65em;
-  border-left: 5px solid var(--k);
-  border-radius: 0.3em;
+  display: inline-block;
+  margin: 0.5em 0 0;
+  padding: 0.5em 0.7em;
+  border: 2.8px solid var(--k);
+  border-radius: 0.5em;
   background: color-mix(in srgb, var(--k) 10%, transparent);
   font-size: 0.8em;
   line-height: 1.3;
 
   &.model { --k: var(--blue); }
   &.result { --k: var(--green); }
-  &.caveat { --k: var(--accent); }
   &.info { --k: var(--purple); }
-  &.prov { font-size: 0.65em; }
+  &.prov { font-size: 0.67em; border-width: 1.5px; }
 }
 
 // ---------------------------------------------------------------- small helpers
@@ -258,26 +345,22 @@ $code-block-font-size: 0.7em !default;
 .reveal .blue { color: var(--blue); }
 .reveal .green { color: var(--green); }
 .reveal .purple { color: var(--purple); }
-.reveal .small { font-size: 0.8em; }
-.reveal .note { color: var(--muted); font-size: 0.65em; }
+.reveal .small { font-size: 0.83em; }
 .reveal .center { text-align: center; }
 
-// ---------------------------------------------------------------- the frame: slide number (right), section (left, set by the player)
-.reveal .slide-number {
-  right: 2%;
-  bottom: 1.4%;
-  padding: 0;
-  background: none;
-  color: var(--ink);
-  font-family: $font-family-sans-serif;
-  font-size: clamp(10px, 1.05vw, 22px);
-  font-weight: 600;
+// the video's note at the foot of a slide (what the picture is made from): `::: {.note}`
+.reveal .slides section .note {
+  position: absolute;
+  left: 96px;
+  right: 96px;
+  top: 962px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.67em;
+  line-height: 1.25;
 }
 
-.reveal .slide-number a {
-  color: inherit;
-}
-
-.reveal .progress {
-  color: var(--accent);
+.reveal .slides section .note p {
+  margin: 0;
+  line-height: inherit;
 }

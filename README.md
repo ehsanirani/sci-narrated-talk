@@ -40,7 +40,7 @@ chromium talk.html
 
 The copies need `-L` because the installed skill is a tree of read-only links into the
 Nix store. The first build downloads the voice model (340 MB) to `~/.cache/kokoro/`.
-The starter is a six-slide talk about a random walk, 1.4 minutes, 6.4 MB as one file.
+The starter is a six-slide talk about a random walk, 1.4 minutes, 6.7 MB as one file.
 
 ## How a talk is written
 
@@ -95,6 +95,7 @@ and the voice alike. `references/authoring.md` has the full syntax.
 | T | outline | | click, drag | select text |
 | M | voice on / off | | | |
 | A | auto-advance on / off | | | |
+| Y | next theme | | | |
 | X | hide / show the bar | | | |
 | ? | help | | | |
 
@@ -114,17 +115,26 @@ and the voice alike. `references/authoring.md` has the full syntax.
 
 ## Themes
 
-![One slide of the starter in the nine themes](docs/themes.png)
+![One build of the starter, switched through the nine themes in the browser](docs/themes.png)
 
-`narrate: theme:` in the front matter picks one of `light` (default), `dark`, `paper`,
-`sci-talk`, `sea`, `journal`, `chalk`, `midnight`, `contrast`, or takes colours of your
-own on a base: `{base: light, accent: "#0b7285"}`. They are the nine themes of
-`sci-video-talk`, so a video and a narrated talk of one story can match.
+The look is the frame of the `sci-video-talk` videos: the title bar with its accent
+rule, accent bullets, the boxed takeaway, the note at the foot, a footer with section,
+talk title and slide number, and the progress bar along the bottom edge. The themes
+are that skill's nine: `light` (default), `dark`, `paper`, `sci-talk`, `sea`,
+`journal`, `chalk`, `midnight`, `contrast`.
 
-A theme is eight colours and a font. The build hands them to the slides (as SCSS and
-as CSS variables) and to `figures.py` (as `C.blue`, `C.accent`, ... and as matplotlib's
-defaults), so text, equations and drawn figures change together. The font is carried
-inside the talk. Clips and pasted images keep their own colours.
+`narrate: theme:` in the front matter sets the theme the talk opens in, by name or as
+colours of your own on a base (`{base: light, accent: "#0b7285"}`). All of them travel
+in the page: the viewer goes to the next one with the Y key or the bar's theme button,
+at any moment and without interrupting the voice, and `?theme=dark` opens in one. The
+picture above is a single build.
+
+This works because a theme has no style rules. `theme/narrated-talk.scss` holds the
+layout, and every colour in it is a name (`var(--accent)`, `var(--ink)`, ...). A theme
+is the nine values behind those names: eight colours and the font. `figures.py` draws
+with the same names (`C.blue`, `C.accent`), and the build writes them into each SVG as
+names instead of fixed colours, so text, equations and drawn figures change together.
+The fonts are carried inside the talk. Clips and pasted images keep their own colours.
 
 ## What is in the skill
 
@@ -139,7 +149,7 @@ sci-narrated-talk/
     ├── talk.qmd                  # slides and narration
     ├── figures.py                # numbers and drawings
     ├── .gitignore
-    ├── theme/narrated-talk.scss  # the look: the videos' layout, driven by the theme's eight colours
+    ├── theme/narrated-talk.scss  # the videos' frame; every colour is a name that a theme gives a value
     └── _extensions/narrate/      # the reveal.js plugin (Quarto extension)
         ├── _extension.yml
         ├── narrate.js            # player, timeline, outline, pointers, growing paths
@@ -149,7 +159,8 @@ sci-narrated-talk/
 ## How it works
 
 1. **Theme.** `narrate.py` resolves `narrate: theme:` to eight colours and a font,
-   checks their contrast, and writes `build/theme.scss` (with the font inside).
+   checks their contrast, and writes `build/theme.scss`: the values the page opens
+   with, and the fonts of all themes. The values of every theme go into the manifest.
 2. **`figures.py`** writes `build/values.yml` and `build/fig/*.html`. A figure is
    matplotlib's SVG with its ids made unique per figure; a part named
    `gid="s2-fit"` is turned into a reveal.js fragment that belongs to sentence 2.
@@ -191,8 +202,9 @@ On the starter talk and on variants of it, in headless Chromium on Linux:
 - Alt+click on a figure part replays its sentence; the outline and the timeline follow;
 - a clip running on the slide's clock, a silent step, a slide without narration;
 - speech inside the page and speech in files beside it;
-- all nine themes: each builds and passes the check, and the embedded font loads with
-  the network cut;
+- all nine themes from one build, switched in the browser: slides, figures, outline
+  and font follow, the voice plays on, and the embedded fonts load with the network cut;
+- a custom accent, and a custom theme refused for low contrast;
 - the check failing on purpose: content hidden behind the author's own pause, and
   narration changed after the last build.
 
@@ -205,15 +217,14 @@ developed on a 22-slide, 15-minute research talk before it was generalised here.
 - **Other browsers.** Firefox, Safari and touch devices are untried.
 - **The speaker view as a real window.** Its previews were tested as pages, not as the
   pop-up reveal.js opens.
-- **A long talk as one file.** The starter is 6.4 MB, of which about 5 MB is the empty
-  deck. Fifteen minutes of speech add about 10 MB; that size is an estimate.
+- **A long talk as one file.** The starter is 6.7 MB, of which about 5.5 MB is the
+  empty deck with its fonts. Fifteen minutes of speech add about 10 MB; that size is an estimate.
 - **A recorded voice or another speech engine.** The file-by-file replacement is
   described in `references/authoring.md` and follows from how files are named; it has
   not been run with another engine.
 - **Video export.** Recording the page to an `.mp4` is the planned next step, so that
   the talk becomes the single source of both forms. Until then, a video is made with
   `sci-video-talk`.
-- **Themes in the browser.** The theme is chosen at build time; the viewer cannot
-  switch it. Clips and pasted images do not follow it.
-- **A custom theme.** The contrast check was run on the nine built-in themes only.
+- **Themes on clips and pasted images.** They keep their own colours.
+- **Every slide in every theme.** Two slides per theme were looked at.
 - **Vertical slide stacks beyond section dividers**, a two-voice dialogue, music.

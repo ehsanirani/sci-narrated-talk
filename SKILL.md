@@ -29,9 +29,11 @@ Ask only for what the project does not already answer.
   typed in from memory.
 - **Voice**: default `af_heart` (Kokoro; `--voices` lists them). For samples to choose
   from, use `sci-video-talk`'s `--voices NAME ...`.
-- **Theme**: `light` (default), `dark`, `paper`, `sci-talk`, `sea`, `journal`, `chalk`,
-  `midnight`, `contrast`, or colours of the user's own. The same nine as
-  `sci-video-talk`; slides and drawn figures both follow it.
+- **Theme**: the one the talk opens in: `light` (default), `dark`, `paper`, `sci-talk`,
+  `sea`, `journal`, `chalk`, `midnight`, `contrast`, or colours of the user's own. The
+  look is the videos' frame and the themes are the same nine as `sci-video-talk`. All
+  of them travel in the page; the viewer switches with the Y key at any moment, and
+  slides, drawn figures and font follow.
 - **One file or a folder**: one `talk.html` with the speech inside (default), or the
   speech beside the page (`narrate: {embed: false}`) for a long talk or one with clips.
 
@@ -72,9 +74,9 @@ a text change speaks only the changed sentences and takes seconds.
 
 ## Workflow
 
-1. **Storyboard.** The shape of the talk is `sci-talk`'s: claim titles, question and
-   answer up front, one section per sub-question, a summary. Read that skill's "shape of
-   the talk" when the deck is new.
+1. **Storyboard.** Sections, and for each its slides. Open on the title slide, state
+   the question and the answer early, give each sub-question a section with a divider,
+   and end on a summary and what is open. Write each slide's title as a claim.
 2. **Narration.** Write the `::: say` blocks of every slide, one stage of the slide per
    sentence. Run `--script`; cut until the length fits.
 3. **Numbers.** `figures.py` reads every spoken or shown number from its source, asserts
@@ -113,12 +115,13 @@ The rules of a talk nobody can interrupt, as in `sci-video-talk`:
   closes in when the sentence starts.
 - **Build, do not show.** Something changes with every sentence: a curve, a bullet, a
   term. A slide whose sentences reveal nothing reads as a frozen frame.
-- **Terse, as in `sci-talk`**: the voice carries the explanation, so the slide carries
-  only the claim, the figure and a few bullets.
+- **Terse.** The voice carries the explanation, so the slide carries only the claim,
+  the figure and a few short bullets.
 - **Colours come from the theme.** `figures.py` draws with `C.blue`, `C.accent` and so
-  on, never with a typed-in colour, and each colour keeps one meaning for the whole
-  talk. The voice names a colour ("the orange line") only when the theme is settled;
-  "the line", "the arrow" survive a change of theme.
+  on, and slides use the theme's classes and `var(--accent)`; a typed-in colour does
+  not follow a change of theme. Each colour keeps one meaning for the whole talk. The
+  voice and the slide text never name a colour ("the orange line"), because the viewer
+  may be in another theme: say "the line", "the arrow".
 - **Every slide is numbered** (`slide-number: c/t` in the starter), so a question can
   name a slide; the address bar shows `#slide.sentence` and such a link opens there.
 - **Stage with `say` blocks only.** Reveal.js fragments and `. . .` pauses of the
@@ -148,9 +151,8 @@ project's own rules for where status and dated records go.
 ## Not built
 
 Say so when asked, rather than improvising: an `.mp4` from the talk (use
-`sci-video-talk` for a video); switching the theme in the browser (it is chosen at
-build time); speech engines other than Kokoro, except by dropping files into
-`media/audio/`; a two-voice dialogue; background music.
+`sci-video-talk` for a video); speech engines other than Kokoro, except by dropping
+files into `media/audio/`; a two-voice dialogue; background music.
 
 ## References
 

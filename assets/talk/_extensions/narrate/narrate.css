@@ -40,7 +40,8 @@ body.nar-idle #nar-bar { opacity: 0; pointer-events: none; }
 #nar-bar kbd { margin-left: 5px; padding: 0 4px; border: 1px solid rgb(255 255 255 / 30%); border-radius: 3px;
   font: 10px ui-monospace, monospace; opacity: .75; }
 #nar-bar .row > kbd { margin-left: -6px; }
-@media (max-width: 760px) { #nar-bar kbd { display: none; } }
+@media (max-width: 860px) { #nar-bar kbd { display: none; } }
+@media (max-width: 560px) { #nar-theme { display: none !important; } }
 #nar-hide span::before { content: "▾"; }
 body.nar-hidden #nar-hide span::before { content: "▴"; }
 body.nar-hidden #nar-tl, body.nar-hidden #nar-bar .row > :not(#nar-hide) { display: none; }
@@ -97,8 +98,10 @@ body:not(.nar-idle):not(.nar-shot):not(.nar-hidden) #nar-cap { bottom: max(9%, 8
 body.nar-captions #nar-cap { display: block; }
 #nar-cap span { background: rgb(29 36 51 / 88%); color: #fff; padding: .15em .5em; border-radius: .3em;
   box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-#nar-sec { position: absolute; left: 2%; bottom: 1.4%; z-index: 30; pointer-events: none; color: var(--muted, #64748b);
+/* the slide's footer texts (section, talk title); the talk's theme places them, this is the fallback under another theme */
+#nar-sec, #nar-ttl { position: absolute; left: 2%; bottom: 1.4%; z-index: 30; pointer-events: none; color: var(--muted, #64748b);
   font-size: clamp(10px, 1.05vw, 22px); }
+#nar-ttl { left: auto; right: 9%; }
 
 /* pointer (a sentence's point="#id"): a ring that closes in on its target */
 .reveal .nar-ptr { position: absolute; z-index: 20; border: 3px solid var(--accent, #e8663d); border-radius: 8px;
