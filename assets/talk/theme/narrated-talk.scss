@@ -1,13 +1,17 @@
 /*-- scss:defaults --*/
 
-// narrated-talk: the frame of the sci-video-talk videos as a Quarto reveal.js theme, for a 1920 x 1080 canvas with
-// `margin: 0`. Used as `theme: [default, theme/narrated-talk.scss, build/theme.scss]`.
+// narrated-talk: the frame and the scene layouts of the sci-video-talk videos as a Quarto reveal.js theme.
+// For a 1920 x 1080 canvas with `margin: 0`; used as `theme: [default, theme/narrated-talk.scss, build/theme.scss]`.
 //
-// This file holds the layout and nothing else. Every colour in its rules is a name (var(--bg), var(--ink),
-// var(--muted), var(--light), var(--accent), var(--blue), var(--green), var(--purple)) and the font is var(--font).
-// A theme is a set of values for those names and has no rules of its own, so the player can swap one theme for
-// another while the talk runs. The values below are the "light" theme; build/theme.scss, written by narrate.py from
-// `narrate: theme:`, replaces them with the talk's own, which is what the page shows before any switch.
+// Geometry. Every position and size below is the video engine's (video_engine.py): a fraction x, y of the frame
+// (origin bottom left) is left = x * 1920px, top = (1 - y) * 1080px, and a text size of s points is pt(s) = s * 100/72 px.
+// The small offsets on `top` bring the browser's line boxes onto the engine's glyph positions, and a line-height of
+// 1.1 * ls + 0.31 is what matplotlib's linespacing = ls measures in this font (1.52 for 1.1, 1.74 for 1.3).
+//
+// Colours. This file holds layout only. Every colour in its rules is a name (var(--bg), var(--ink), var(--muted),
+// var(--light), var(--accent), var(--blue), var(--green), var(--purple)) and the font is var(--font). A theme is a
+// set of values for those names and has no rules of its own, so the player can swap themes while the talk runs. The
+// values below are the "light" theme; build/theme.scss, written by narrate.py from `narrate: theme:`, replaces them.
 $bg: #ffffff !default; // slide background
 $ink: #1d2433 !default; // text
 $muted: #6b7280 !default; // small print, axes
@@ -19,19 +23,21 @@ $purple: #7b5ea7 !default;
 // the font stack; unquote() keeps the inner quotes in the CSS, and a family name with a digit is invalid without them
 $font: unquote('"Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif') !default;
 
+@function pt($s) {
+  @return $s * 100 / 72 * 1px;
+}
+
 $font-family-sans-serif: $font !default;
 $body-bg: $bg !default;
 $body-color: $ink !default;
 $link-color: $blue !default;
-// Every em below is a fraction of the slide: 36px on the 1920px canvas is the video's bullet size. No rem: reveal.js
-// sets this size on .reveal, not on the page's root.
-$presentation-font-size-root: 36px !default;
+$presentation-font-size-root: pt(27) !default; // the engine's text() default
 $presentation-heading-font: $font !default;
 $presentation-heading-color: $ink !default;
 $presentation-heading-font-weight: 600 !default;
-$presentation-h1-font-size: 2.2em !default;
-$presentation-h2-font-size: 1.55em !default;
-$presentation-h3-font-size: 1.1em !default;
+$presentation-h1-font-size: pt(58) !default;
+$presentation-h2-font-size: pt(40) !default;
+$presentation-h3-font-size: pt(30) !default;
 $code-block-font-size: 0.7em !default;
 
 /*-- scss:rules --*/
@@ -75,118 +81,151 @@ body,
   color: var(--blue);
 }
 
-// ---------------------------------------------------------------- the frame: title bar, content, footer
-// 96px (5 %) to the left and right, as in the video; the title sits at the top with the accent rule under it.
+// ---------------------------------------------------------------- the frame (the engine's base())
 .reveal .slides {
   text-align: left;
 }
 
-// (not the stack that a section heading wraps around its slides)
+// The content zone starts at y = 0.80, x = 0.06 and ends at x = 0.95. Not the stack a section heading makes.
 .reveal .slides section:not(:has(> section)) {
   box-sizing: border-box;
-  padding: 44px 96px 0;
+  top: 0 !important;
+  height: 1080px;
+  padding: 210px 96px 0 115px;
 }
 
-.reveal h2 {
-  margin: 0 0 1.05em;
-  padding-bottom: 0.2em;
-  border-bottom: 3.5px solid var(--accent);
+// title bar: the claim at x = 0.05 on the baseline y = 0.905, the accent rule at y = 0.88
+.reveal .slides section > h2 {
+  position: absolute;
+  left: 96px;
+  right: 96px;
+  top: 50px;
+  height: 78px;
+  margin: 0;
+  padding: 0;
+  border-bottom: 4px solid var(--accent);
+  font-size: pt(40);
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0;
   text-transform: none;
+  white-space: nowrap; // a title too long for the bar fails the build's check instead of pushing the rule down
 }
 
-// The footer row scales with the slide: section (left) and talk title (right), both set by the player, and "n / N".
-// !important: reveal.js's and Quarto's own slide-number rules load after the theme.
-.reveal #nar-sec,
-.reveal #nar-ttl,
-.reveal .slide-number {
-  position: absolute !important;
-  top: auto !important;
-  bottom: 2.4% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  background: none !important;
-  color: var(--muted) !important;
-  font-family: var(--font) !important;
-  font-size: calc(24px * var(--slide-scale, 1)) !important;
-  line-height: 1 !important;
+.reveal .slides section > h2:empty {
+  display: none;
 }
 
-.reveal #nar-sec {
-  left: 5% !important;
+// footer, drawn by the player inside the slide: section (left), talk title and "n / N" (right), progress along the edge
+#nar-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  font-family: var(--font);
+  line-height: 1;
 }
 
-.reveal #nar-ttl {
-  left: auto !important;
-  right: calc(5% + 4.6em) !important;
+#nar-frame > * {
+  position: absolute;
+  bottom: 22px;
+  white-space: nowrap;
 }
 
-.reveal .slide-number {
-  left: auto !important;
-  right: 5% !important;
-  color: var(--ink) !important;
-  font-size: calc(26px * var(--slide-scale, 1)) !important;
+#nar-frame #nar-sec {
+  left: 96px;
+  color: var(--muted);
+  font-size: pt(17);
+}
+
+#nar-frame #nar-ttl {
+  right: 182px; // its right edge at x = 0.905
+  color: var(--muted);
+  font-size: pt(17);
+}
+
+#nar-frame #nar-no {
+  right: 96px;
+  bottom: 21px;
+  color: var(--ink);
+  font-size: pt(20);
   font-weight: 600;
 }
 
-.reveal .slide-number a {
-  color: inherit;
-}
-
-// the title slide and the dividers are their own frame (the player marks them)
-.reveal.nar-bare :is(#nar-sec, #nar-ttl) {
-  visibility: hidden;
-}
-
-.reveal .progress {
-  height: calc(8px * var(--slide-scale, 1));
+#nar-frame #nar-prog {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8.5px;
   background: var(--light);
-  color: var(--accent);
+}
+
+#nar-frame #nar-prog b {
+  display: block;
+  height: 100%;
+  background: var(--accent);
 }
 
 // ---------------------------------------------------------------- text
+// text(): 27 points, linespacing 1.3
 .reveal :is(p, ul, ol, blockquote) {
   margin: 0 0 0.6em;
-  line-height: 1.4;
+  line-height: 1.74;
 }
 
 .reveal :is(strong, b) {
   font-weight: 600;
 }
 
-// bullets carry the accent
+// bullets(): an accent dot, the text 0.022 to its right, linespacing 1.1, 0.03 between items. The engine steps 1.342 em
+// per line of a bullet and draws the lines 1.52 em apart, so the gap after a bullet is 0.03 less 0.178 em per line:
+// the player sets that (see --bullet-gap); the margin here is the two-line case, for a page without the player.
+.reveal {
+  --bullet-gap: 32.4px;
+  --bullet-overlap: 0.178;
+}
+
 .reveal .slides section ul {
   list-style: none;
-  margin-left: 0;
-  padding-left: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .reveal .slides section ul li {
   position: relative;
-  padding-left: 1.25em;
-  margin: 0 0 0.75em;
-  line-height: 1.45;
+  margin: 0 0 calc(32.4px - 0.356em);
+  padding-left: 42px;
+  line-height: 1.52;
 }
 
 .reveal .slides section ul li::before {
   content: "•";
   position: absolute;
-  left: 0.1em;
+  left: 0;
   color: var(--accent);
   font-weight: 700;
+}
+
+// a slide of bullets only (the engine's bullet_scene): 29 points, wrapped at 70 characters
+.reveal .slides section > ul {
+  max-width: calc(32.2em + 42px);
+  font-size: pt(29);
 }
 
 .reveal ol {
   padding-left: 1.2em;
 }
 
-.reveal :is(.column, .box, .takeaway) > :is(p, ul, ol):first-child {
+.reveal :is(.column, .box, .takeaway, .text) > :is(p, ul, ol):first-child {
   margin-top: 0;
 }
 
 .reveal :is(.box, .takeaway) > :is(p, ul, ol):last-child {
   margin-bottom: 0;
+}
+
+.reveal :is(.box, .takeaway) p {
+  line-height: inherit;
 }
 
 .reveal :is(img, video) {
@@ -199,17 +238,16 @@ body,
 }
 
 .reveal .katex-display {
-  margin: 0.6em 0;
-  font-size: 1.15em;
+  margin: 0.5em 0;
 }
 
 .reveal figcaption {
   color: var(--muted);
-  font-size: 0.7em;
+  font-size: pt(17);
 }
 
 .reveal table {
-  font-size: 0.85em;
+  font-size: pt(23);
   border-collapse: collapse;
 }
 
@@ -223,91 +261,166 @@ body,
   border-bottom-color: var(--muted);
 }
 
-// ---------------------------------------------------------------- title slide (built by Quarto from the front matter)
-#title-slide {
-  text-align: left;
+// ---------------------------------------------------------------- scene layouts
+// beside(): `::: {.beside}` holding `::: {.fig}` (a figure with its axis labels, around the engine's plot rectangle
+// 0.07, 0.20, 0.50, 0.60) and `::: {.text}` (staged bullets at x = 0.66, y = 0.80, 26 points, and the takeaway)
+.reveal .beside > .fig {
+  position: absolute;
+  left: 40px;
+  top: 190px;
+  width: 1090px;
+  height: 770px;
 }
 
-#title-slide .title {
-  max-width: 19em;
-  margin: 0 0 0.55em;
-  font-size: 2.2em;
-  font-weight: 700;
-  line-height: 1.15;
-}
-
-#title-slide .subtitle {
-  max-width: 26em;
-  margin: 0;
-  color: var(--accent);
-  font-size: 1.35em;
-  line-height: 1.35;
-}
-
-#title-slide .quarto-title-authors,
-#title-slide .quarto-title-author,
-#title-slide .quarto-title-author-name,
-#title-slide .quarto-title-affiliation {
+.reveal :is(.fig, .art) > :is(svg, img, video),
+.reveal :is(.fig, .art) > p > :is(img, video) {
   display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.reveal :is(.fig, .art) > p {
+  height: 100%;
   margin: 0;
-  padding: 0;
-  text-align: left;
-  font-size: 1em;
-  line-height: 1.5;
 }
 
-#title-slide .quarto-title-authors {
-  margin-top: 1.8em;
+.reveal .beside > .text {
+  position: absolute;
+  left: 1267px;
+  top: 211px;
+  width: 557px;
+  font-size: pt(26);
 }
 
-#title-slide .quarto-title-author-name {
-  font-weight: 600;
+// beside() wraps its bullets at 28 characters (put .w34 on the .text for another width)
+.reveal .beside > .text > ul {
+  max-width: calc(12.04em + 42px);
 }
 
-#title-slide .quarto-title-affiliation {
+.reveal .beside > .text[class*=" w"] > ul,
+.reveal .slides section > ul[class*=" w"] {
+  max-width: none;
+}
+
+.reveal .beside > .text .takeaway {
+  margin: 26px 0 0 -2px;
+  font-size: pt(24);
+}
+
+// the picture box of title and divider cards (the engine's ART): `::: {.art}`
+.reveal .slides section .art {
+  position: absolute;
+  left: 1094px;
+  top: 186px;
+  width: 749px;
+  height: 748px;
+}
+
+// title_scene(): `## The talk's title {.title-card}` with `::: {.subtitle}`, `::: {.byline}`, `::: {.coauthors}`, `::: {.art}`
+.reveal .slides section.title-card {
+  padding: 159px 96px 0;
+}
+
+.reveal .slides section.title-card > h2 {
+  position: static;
+  height: auto;
+  max-width: 980px;
+  border: 0;
+  font-size: pt(66);
+  font-weight: 700;
+  line-height: 1.465;
+  white-space: normal;
+}
+
+.reveal .slides section.title-card > h2.long {
+  font-size: pt(52); // a title of more than two lines (set by the player)
+}
+
+.reveal .title-card .subtitle {
+  max-width: 920px;
+  margin: 30px 0 0;
+  color: var(--accent);
+  font-size: pt(29);
+  line-height: 1.575;
+}
+
+.reveal .title-card .byline {
+  margin: 66px 0 0; // at least; the player lowers it to y = 0.33 under a short title
+  font-size: pt(22);
+  line-height: 1.74;
+}
+
+.reveal .title-card .coauthors {
+  max-width: 900px;
+  margin: 12px 0 0;
   color: var(--muted);
-  font-size: 0.8em;
+  font-size: pt(19);
+  line-height: 1.74;
 }
 
-// ---------------------------------------------------------------- section dividers
-// `# [01 · Background]{.eyebrow} The model in one picture {.divider .center}`
-.reveal section.divider {
-  text-align: center;
-}
-
-.reveal section.divider h1 {
+.reveal .title-card :is(.subtitle, .byline, .coauthors) p {
   margin: 0;
-  line-height: 1.2;
+  line-height: inherit;
+}
+
+// divider(): `# [Part 2]{.part} The section's claim {.divider}` with an optional `::: {.sub}` and `::: {.art}`
+.reveal .slides section.divider {
+  padding: 314px 96px 0 115px;
+  text-align: left;
+}
+
+.reveal .slides section.divider > h1 {
+  max-width: 1500px;
+  margin: 0;
+  font-size: pt(58);
+  font-weight: 700;
+  line-height: 1.465;
   text-transform: none;
 }
 
-.reveal section.divider p {
-  color: var(--muted);
+.reveal .slides section.divider:has(.art) > h1 {
+  max-width: 900px;
 }
 
-.reveal .eyebrow {
+.reveal .divider .part {
   display: block;
-  margin-bottom: 0.9em;
+  height: 80px;
   color: var(--accent);
-  font-size: 0.4em;
+  font-size: pt(30);
   font-weight: 600;
-  letter-spacing: 0.1em;
-  line-height: 1.4;
-  text-transform: uppercase;
+  line-height: 1.22;
+}
+
+.reveal .divider .sub {
+  max-width: 1050px;
+  margin: 34px 0 0;
+  color: var(--muted);
+  font-size: pt(28);
+  line-height: 1.74;
+}
+
+.reveal .divider .sub p {
+  margin: 0;
+  line-height: inherit;
 }
 
 // ---------------------------------------------------------------- boxes
-// The video's callout, the one-line "so what" of a slide: `::: {.takeaway}`.
+// callout(): the boxed statement of a slide, `::: {.takeaway}`. 28 points, semibold, pad 0.6, rounded.
 .reveal .takeaway {
   display: inline-block;
   margin: 0.5em 0 0;
-  padding: 0.6em 0.7em;
+  padding: 0.72em 0.62em;
   border: 2.8px solid var(--accent);
-  border-radius: 0.5em;
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
-  font-size: 0.9em;
+  border-radius: 0.6em;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: pt(28);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.41;
+}
+
+.reveal :is(.takeaway, .box).absolute {
+  margin: 0;
 }
 
 // `::: {.box .model}`: the same shape in another colour; the kind is a claim about the text.
@@ -317,41 +430,65 @@ body,
   --k: var(--muted);
   display: inline-block;
   margin: 0.5em 0 0;
-  padding: 0.5em 0.7em;
+  padding: 0.72em 0.62em;
   border: 2.8px solid var(--k);
-  border-radius: 0.5em;
+  border-radius: 0.6em;
   background: color-mix(in srgb, var(--k) 10%, transparent);
-  font-size: 0.8em;
-  line-height: 1.3;
+  font-size: pt(24);
+  line-height: 1.41;
 
   &.model { --k: var(--blue); }
   &.result { --k: var(--green); }
   &.info { --k: var(--purple); }
-  &.prov { font-size: 0.67em; border-width: 1.5px; }
+  &.prov { font-size: pt(17); border-width: 1.5px; }
 }
 
-// ---------------------------------------------------------------- small helpers
-.reveal .muted { color: var(--muted); }
-.reveal .accent { color: var(--accent); }
-.reveal .blue { color: var(--blue); }
-.reveal .green { color: var(--green); }
-.reveal .purple { color: var(--purple); }
-.reveal .small { font-size: 0.83em; }
-.reveal .center { text-align: center; }
-
-// the video's note at the foot of a slide (what the picture is made from): `::: {.note}`
+// note(): the small print above the footer, `::: {.note}` (what the picture is made from)
 .reveal .slides section .note {
   position: absolute;
   left: 96px;
   right: 96px;
-  top: 962px;
+  bottom: 76px;
   margin: 0;
   color: var(--muted);
-  font-size: 0.67em;
-  line-height: 1.25;
+  font-size: pt(17);
+  line-height: 1.63;
 }
 
 .reveal .slides section .note p {
   margin: 0;
   line-height: inherit;
+}
+
+// ---------------------------------------------------------------- the engine's text sizes and wrap widths, by name
+// .s24 = text of 24 points (the engine's size=24); .w40 = wrapped about like the engine's width=40 (characters, plus
+// a bullet's indent). The engine breaks lines by counting characters and a browser by measuring them, so the two
+// agree on most lines and not on all: where a break matters, write it into the source with a backslash.
+@for $s from 12 through 72 {
+  .reveal .s#{$s} { font-size: pt($s); }
+}
+
+@for $w from 16 through 90 {
+  .reveal .w#{$w} { max-width: calc(#{$w * 0.47}em + 42px); }
+}
+
+.reveal .muted { color: var(--muted); }
+.reveal .ink { color: var(--ink); }
+.reveal .accent { color: var(--accent); }
+.reveal .blue { color: var(--blue); }
+.reveal .green { color: var(--green); }
+.reveal .purple { color: var(--purple); }
+.reveal .semibold { font-weight: 600; }
+.reveal .bold { font-weight: 700; }
+.reveal .center { text-align: center; }
+.reveal .tight,
+.reveal .tight p { line-height: 1.52; } // linespacing 1.1
+.reveal .loose,
+.reveal .loose p { line-height: 1.74; } // linespacing 1.3
+
+// A block pinned with Quarto's `.absolute` (left = x, top = 1 - y, in per cent of the frame) keeps to one line
+// unless the source breaks it, as the engine's text() does.
+.reveal .slides section .absolute > p {
+  margin: 0;
+  white-space: nowrap;
 }

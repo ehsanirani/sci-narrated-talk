@@ -69,6 +69,10 @@ THEMES = {  # bg, ink (text), muted (small print), light (rules), accent (title 
 FONT = "Source Sans 3"
 GLYPHS = [(0x20, 0x17F), (0x370, 0x3FF), (0x2000, 0x20CF), (0x2100, 0x214F), (0x2190, 0x22FF), (0x25A0, 0x25FF),
           (0x27E8, 0x27E9)]  # what a font shipped in the talk keeps: Latin, Greek, punctuation, arrows, math, shapes
+# Figure sizes in inches at 100 px per inch of the 1920 x 1080 frame, so that text sizes are the videos' points:
+FIG = (10.9, 7.7)  # the .fig box of a .beside slide (the video's plot rectangle plus room for its axis labels)
+PLOT = (0.0866, 0.1247, 0.8807, 0.8416)  # the axes inside it, where the video's beside() puts its plot: fig.add_axes(PLOT)
+ART = (7.49, 7.48)  # the .art picture box of a title or divider card
 C = types.SimpleNamespace()  # the theme's colours for figures.py: C.bg, C.ink, C.muted, C.light, C.accent, C.blue, ...
 PALETTES = {}  # what the page can switch between: name -> the eight colours and the font stack
 
@@ -142,10 +146,13 @@ def font_faces(family):
     try:
         import io
 
+        import logging
+
         from fontTools import subset
         from matplotlib import font_manager as fm
     except ImportError:
         return ""
+    logging.getLogger("fontTools").setLevel(logging.ERROR)  # no notes about tables it leaves out
     css = ""
     for weight, style in ((400, "normal"), (600, "normal"), (400, "italic")):
         try:
@@ -185,9 +192,13 @@ def apply_theme(spec, drawing):
         import matplotlib.pyplot as plt
         from cycler import cycler
 
-        plt.rcParams.update({
-            "font.size": 13, "text.color": C.ink, "axes.labelcolor": C.ink, "axes.edgecolor": C.muted,
-            "xtick.color": C.muted, "ytick.color": C.muted, "grid.color": C.light, "patch.edgecolor": C.ink,
+        import logging
+
+        logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)  # no notes about a font this machine lacks
+        plt.rcParams.update({  # the video engine's: sizes of its style(), everything in ink, measured in the theme's font
+            "font.family": [th["font"], "DejaVu Sans"], "mathtext.fontset": "stixsans", "font.size": 18,
+            "axes.labelsize": 20, "lines.linewidth": 2.5, "text.color": C.ink, "axes.labelcolor": C.ink,
+            "axes.edgecolor": C.ink, "xtick.color": C.ink, "ytick.color": C.ink, "grid.color": C.light, "patch.edgecolor": C.ink,
             "axes.spines.top": False,
             "axes.spines.right": False, "axes.prop_cycle": cycler(color=[C.blue, C.green, C.purple, C.accent])})
     return name

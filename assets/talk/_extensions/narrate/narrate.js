@@ -36,7 +36,7 @@ window.RevealNarrate = () => {
   const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
   const words = s => s.trim().replace(/\s+/g, ' ');
   const short = s => { const w = s.split(' '); return w.length > 11 ? w.slice(0, 10).join(' ') + ' …' : s; };
-  const heading = e => e ? words([...e.childNodes].filter(n => !n.classList?.contains('eyebrow')).map(n => n.textContent).join('')) : '';
+  const heading = e => e ? words([...e.childNodes].filter(n => !n.matches?.('.part, .eyebrow')).map(n => n.textContent).join('')) : '';
   const titleOf = j => heading(slides[j].querySelector('h1, h2')) || SEC[j] || document.title;
 
   // ------------------------------------------------------------ sentences -> reveal fragments
@@ -63,8 +63,10 @@ window.RevealNarrate = () => {
   function render() {
     const s = says(h)[k], sec = slides[h];
     $('#nar-cap span').textContent = s ? s.textContent.trim() : '';
-    $('#nar-sec').textContent = SEC[h];
-    deck.getRevealElement().classList.toggle('nar-bare', sec.matches('#title-slide, .divider'));  // no footer texts there
+    fit(sec);
+    $('#nar-sec').textContent = SEC[h];  // the slide's frame: section, "n / N", progress
+    $('#nar-no').textContent = `${h + 1} / ${N}`;
+    $('#nar-prog b').style.width = (h + 1) / N * 100 + '%';
     $('#nar-num').textContent = `${h + 1} / ${N}`;
     if (built !== h) layout();
     syncOutline();
@@ -287,7 +289,10 @@ window.RevealNarrate = () => {
 <tr><td>Ctrl+click</td><td>zoom in (reveal.js); again to zoom out</td></tr><tr><td>click, drag</td><td>select text</td></tr></table>
 <p>Keys with Ctrl, Alt or Meta are left to the browser. Click anywhere to close.</p></div></div>
 <div id="nar-start"><div>▶&nbsp; Click or press space to start<small>${esc(body.dataset.error || '')}</small></div></div>`);
-    deck.getRevealElement().insertAdjacentHTML('beforeend', `<div id="nar-sec"></div><div id="nar-ttl">${esc(document.title)}</div><div id="nar-cap"><span></span></div>`);
+    deck.getRevealElement().insertAdjacentHTML('beforeend', '<div id="nar-cap"><span></span></div>');
+    // the frame of every slide, inside the slide's own box so that it scales and letterboxes with it
+    deck.getSlidesElement().insertAdjacentHTML('beforeend', `<div id="nar-frame"><div id="nar-sec"></div>
+<div id="nar-ttl">${esc(document.title)}</div><div id="nar-no"></div><div id="nar-prog"><b></b></div></div>`);
     $('#nar-theme').onclick = () => { const n = Object.keys(T.themes || {}); setTheme(n[(n.indexOf(theme) + 1) % n.length]); };
     setTheme(T.themes?.[q.get('theme')] ? q.get('theme') : T.theme, !q.get('theme'));
     $('#nar-play').onclick = () => (started() ? toggle() : begin());
@@ -322,6 +327,23 @@ window.RevealNarrate = () => {
     if (!th) return;
     theme = name; $('#nar-theme span').textContent = name; body.dataset.theme = name;
     if (!keep) for (const [k, v] of Object.entries(th)) document.documentElement.style.setProperty('--' + k, v);
+  }
+  // Two things the video engine does that a style sheet cannot, on the slide that shows (only a theme that sets
+  // --bullet-gap asks for them). Bullets: the engine steps less per line of a bullet than it draws the lines apart,
+  // so the gap after a bullet shrinks with its number of lines. Title card: a title of more than two lines is set
+  // smaller, and the byline sits at y = 0.33 of the frame or below the subtitle, whichever is lower.
+  function fit(sec) {
+    const cs = getComputedStyle(deck.getRevealElement()), gap = parseFloat(cs.getPropertyValue('--bullet-gap'));
+    if (!gap) return;
+    const over = parseFloat(cs.getPropertyValue('--bullet-overlap')) || 0;
+    for (const li of sec.querySelectorAll('ul > li')) {
+      const c = getComputedStyle(li), lines = Math.max(1, Math.round(li.clientHeight / parseFloat(c.lineHeight)));
+      li.style.marginBottom = gap - over * parseFloat(c.fontSize) * lines + 'px';
+    }
+    if (!sec.matches('.title-card')) return;
+    const t = sec.querySelector('h2'), by = sec.querySelector('.byline');
+    if (t) t.classList.toggle('long', t.offsetHeight > 2.4 * parseFloat(getComputedStyle(t).lineHeight));
+    if (by) { by.style.paddingTop = ''; by.style.paddingTop = Math.max(0, 716 * deck.getConfig().height / 1080 - by.offsetTop) + 'px'; }
   }
   function setOutline(v = !body.classList.contains('nar-outline')) {
     body.classList.toggle('nar-outline', v); $('#nar-olb').setAttribute('aria-pressed', v); syncOutline();
@@ -419,6 +441,7 @@ window.RevealNarrate = () => {
       audio.ontimeupdate = () => { body.dataset.audio = `${h + 1}.${k + 1}@${audio.currentTime.toFixed(1)}`; };
       deck.on('ready', () => {
         deck.sync(); deck.layout();
+        document.fonts?.ready.then(() => fit(slides[h]));
         const [a, b] = hash.slice(1).split('.').map(Number);
         h = Math.min(N - 1, Math.max(0, (a || 1) - 1));
         k = SHOT && !b ? 99 : (b || 1) - 1;

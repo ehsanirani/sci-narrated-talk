@@ -40,7 +40,8 @@ chromium talk.html
 
 The copies need `-L` because the installed skill is a tree of read-only links into the
 Nix store. The first build downloads the voice model (340 MB) to `~/.cache/kokoro/`.
-The starter is a six-slide talk about a random walk, 1.4 minutes, 6.7 MB as one file.
+The starter is a four-slide talk about a random walk, the twin of the video skill's
+starter: 1.3 minutes, 6.8 MB as one file.
 
 ## How a talk is written
 
@@ -48,41 +49,59 @@ Slides and narration live in one `talk.qmd`. A `::: say` block is one spoken sen
 what follows it appears when it starts.
 
 ```markdown
-## The walkers spread in proportion to time
+## The walkers spread in proportion to time {#result sec="The measurement"}
 
-::: {.columns}
-::: {.column width="56%"}
+:::: {.beside}
+::: {.fig}
 {{< include build/fig/msd.html >}}
 :::
 
-::: {.column width="44%"}
+::::: {.text}
 ::: say
 Here is the mean squared displacement of our {{< meta v.walkers >}} walkers, against time.
 :::
 
-- Blue: the average over {{< meta v.walkers >}} walkers
+- Points: the average over {{< meta v.walkers >}} walkers
 
 ::: {.say point="#msd-fit"}
 A straight line fits it. Its slope gives a diffusion constant of {{< meta v.D >}}.
 :::
 
-- Orange: a straight line through the origin
+- Line: a least-squares fit through the origin
+
+::: {.takeaway}
+The slope returns the D we put in
 :::
-:::
+:::::
+::::
 ```
 
 Numbers and drawings come from `figures.py`, which the build runs first:
 
 ```python
-values(D=f"{D:.2f}", walkers=WALKERS)            # quoted as {{< meta v.D >}}
-ax.plot(t, msd, "o", gid="points")               # on the slide from the start
-ax.plot(t, slope * t, gid="s2-fit")              # appears with sentence 2; id "msd-fit"
-figure(fig, "msd")                               # inline SVG, build/fig/msd.html
+values(D=f"{D:.2f}", walkers=WALKERS)                   # quoted as {{< meta v.D >}}
+fig = plt.figure(figsize=FIG); ax = fig.add_axes(PLOT)  # the figure box of the layout
+ax.plot(t, msd, "o", color=C.blue, gid="points")        # on the slide from the start
+ax.plot(t, slope * t, color=C.accent, gid="s2-fit")     # appears with sentence 2; id "msd-fit"
+figure(fig, "msd")                                      # inline SVG, build/fig/msd.html
 ```
 
-So the second sentence above brings in the fitted line and its bullet, and a ring
-closes in on the line. Every number is computed once and used by the slide, the figure
-and the voice alike. `references/authoring.md` has the full syntax.
+So the second sentence brings in the fitted line and its bullet, and a ring closes in on
+the line. Every number is computed once and used by the slide, the figure and the voice
+alike. `references/authoring.md` has the full syntax.
+
+## The video's look, to the pixel
+
+`.beside` above is one of the layouts that copy the scenes of the `sci-video-talk`
+engine: the title card, the divider, a figure beside staged bullets, bullets only, the
+takeaway box, the note at the foot. The theme takes every position and size from the
+engine's code, and text sizes and wrap widths are available by the engine's own numbers
+(`.s24`, `.w40`). The player draws the frame inside the slide: section, talk title,
+"n / N" and the progress bar.
+
+Measured on the starter, whose video twin exists: the title, its rule, the plot's axes
+and labels, the bullets, the note and the footer sit within 3 px of the video frame at
+1920 x 1080, and the takeaway box within 5 px.
 
 ## The player
 
@@ -149,7 +168,7 @@ sci-narrated-talk/
     ├── talk.qmd                  # slides and narration
     ├── figures.py                # numbers and drawings
     ├── .gitignore
-    ├── theme/narrated-talk.scss  # the videos' frame; every colour is a name that a theme gives a value
+    ├── theme/narrated-talk.scss  # the videos' frame and scene layouts; every colour is a name a theme gives a value
     └── _extensions/narrate/      # the reveal.js plugin (Quarto extension)
         ├── _extension.yml
         ├── narrate.js            # player, timeline, outline, pointers, growing paths
@@ -217,7 +236,7 @@ developed on a 22-slide, 15-minute research talk before it was generalised here.
 - **Other browsers.** Firefox, Safari and touch devices are untried.
 - **The speaker view as a real window.** Its previews were tested as pages, not as the
   pop-up reveal.js opens.
-- **A long talk as one file.** The starter is 6.7 MB, of which about 5.5 MB is the
+- **A long talk as one file.** The starter is 6.8 MB, of which about 5.5 MB is the
   empty deck with its fonts. Fifteen minutes of speech add about 10 MB; that size is an estimate.
 - **A recorded voice or another speech engine.** The file-by-file replacement is
   described in `references/authoring.md` and follows from how files are named; it has

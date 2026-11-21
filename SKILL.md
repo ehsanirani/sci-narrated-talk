@@ -47,7 +47,7 @@ cp -rL --no-preserve=mode <this skill>/assets/talk <dir>
 cp -L --no-preserve=mode <this skill>/scripts/narrate.py <dir>/
 ```
 
-That is a complete six-slide talk that builds as it stands: `talk.qmd` (slides and
+That is a complete four-slide talk that builds as it stands: `talk.qmd` (slides and
 narration), `figures.py` (numbers and drawings), `_extensions/narrate/` (the player),
 `theme/narrated-talk.scss` (the look) and a `.gitignore`. Replace the content and keep
 the structure. `narrate.py`, `_extensions/` and `theme/` stay unedited, so that a fix in
@@ -122,7 +122,11 @@ The rules of a talk nobody can interrupt, as in `sci-video-talk`:
   not follow a change of theme. Each colour keeps one meaning for the whole talk. The
   voice and the slide text never name a colour ("the orange line"), because the viewer
   may be in another theme: say "the line", "the arrow".
-- **Every slide is numbered** (`slide-number: c/t` in the starter), so a question can
+- **Use the video's layouts** (`references/authoring.md`): the title card, the divider,
+  a figure beside staged bullets, bullets only, the takeaway, the note. They put every
+  block where the video engine would, at its sizes. Pin blocks by hand only for a slide
+  no layout fits.
+- **Every slide is numbered** by the player, "n / N" in the footer, so a question can
   name a slide; the address bar shows `#slide.sentence` and such a link opens there.
 - **Stage with `say` blocks only.** Reveal.js fragments and `. . .` pauses of the
   author's own are not narrated and break the count.

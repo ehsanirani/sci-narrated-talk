@@ -7,7 +7,8 @@ below once.
 ## Contents
 
 - [The say block](#the-say-block)
-- [The title slide, sections, silent steps](#the-title-slide-sections-silent-steps)
+- [Layouts and sizes](#layouts-and-sizes)
+- [Sections and silent steps](#sections-and-silent-steps)
 - [Pointers and growing paths](#pointers-and-growing-paths)
 - [Numbers: `values()`](#numbers-values)
 - [Figures: `figure()`](#figures-figure)
@@ -42,25 +43,50 @@ A straight line fits it.
 - **What follows a block, up to the next block, appears when that sentence starts.**
   What follows the first block is on the slide from the start, and so is everything
   above it.
-- Blocks work inside columns and other containers. Inside a column, "what follows"
-  means the following siblings in that column.
+- Blocks work inside containers such as the `.text` of a `.beside` slide. Inside a
+  container, "what follows" means the following siblings in it.
 - A sentence that reveals nothing still gets its block, where it belongs in the order.
 - Keep markup out of the sentence: `*`, `_` and backticks are stripped before speech,
   math and backslashes are refused by the build.
 
-## The title slide, sections, silent steps
+## Layouts and sizes
 
-- **Title slide.** Quarto builds it from the front matter, so its narration is given
-  there, sentences separated by `|`:
+The theme is the frame and the scenes of the `sci-video-talk` videos, on a 1920 x 1080
+canvas. A slide written in one of the layouts below lands where the video engine would
+draw it, to within a few pixels. The player draws the frame: section (left), talk title
+and "n / N" (right), and the progress bar along the bottom edge.
 
-  ```yaml
-  title-slide-attributes:
-    data-say: "First sentence.|Second sentence."
-  ```
+| the video's scene | on the slide |
+|---|---|
+| title bar | the `##` heading: one line, with the accent rule under it. A title too long for the bar fails the check |
+| `title_scene` | `## The talk's title {.title-card}` with `::: {.subtitle}`, `::: {.byline}`, optionally `::: {.coauthors}` and a picture in `::: {.art}` |
+| `divider` | `# [Part 2]{.part} The section's claim {.divider}` with an optional `::: {.sub}` line and `::: {.art}` |
+| `beside` | `:::: {.beside}` holding `::: {.fig}` (the figure) and `::::: {.text}` (the `say` blocks, staged bullets, the takeaway) |
+| `bullet_scene` | `say` blocks and bullets directly under the heading |
+| `callout` | `::: {.takeaway}`; `::: {.box .model}` (`.result`, `.info`, `.prov`) is the same box in another colour |
+| `note` | `::: {.note}`, the small print above the footer: what the picture is made from |
+| a scene drawn by hand | blocks pinned with `::: {.absolute left="56%" top="43.7%"}`: `left` is the engine's x, `top` is 1 − y, in per cent of the frame |
 
-- **Sections.** A `#` heading makes a divider slide and names the section for the
-  timeline, the outline and the slide footer. A slide can override it with
-  `{sec="Name"}` on its heading. Narrate the divider with a short `say` block under it.
+Sizes and widths are the engine's, by name:
+
+- `.s24` sets text of 24 points, any size from 12 to 72. The body is 27 points; bullets
+  are 29 on a slide of bullets and 26 beside a figure; a takeaway is 28 (24 beside a
+  figure); a note is 17.
+- `.w40` wraps about like the engine's `width=40` (characters). The engine breaks lines
+  by counting characters and a browser by measuring them, so they agree on most lines
+  and not on all. Where a break matters, write it with a backslash at the end of the
+  line. Bullets beside a figure wrap at 28 characters; put `.w34` on the `.text` block
+  for another width.
+- `.muted`, `.accent`, `.blue`, `.green`, `.purple`, `.ink` colour a block; `.semibold`,
+  `.bold`; `.tight` and `.loose` are the engine's linespacing 1.1 and 1.3.
+
+Set the talk's title in the front matter as `pagetitle:` (it is the footer's text) and
+not as `title:`, which would make Quarto add a title slide of its own.
+
+## Sections and silent steps
+
+- **Sections.** A slide's section, shown in the footer, the timeline and the outline, is
+  `{sec="Name"}` on its heading, or the last `#` divider before it.
 - **A silent step**: an empty block, `::: {.say wait="2" label="The axes appear"}`
   closed by `:::` on the next line. It lasts `wait` seconds (default 3) and what follows
   it appears in silence. `label` is its name in the outline; without one the outline
@@ -111,30 +137,36 @@ change"), so that the build fails when the data moves.
 ## Figures: `figure()`
 
 ```python
-fig, ax = plt.subplots(figsize=(5.4, 3.9))
-ax.plot(t, msd, "o", gid="points")            # there from the start; id "msd-points"
-ax.plot(t, slope * t, gid="s2-fit")           # appears with sentence 2; id "msd-fit"
+from narrate import ART, FIG, PLOT, C, figure, values
+
+fig = plt.figure(figsize=FIG)                 # the .fig box of a .beside slide
+ax = fig.add_axes(PLOT)                       # where the video's beside() puts its plot
+ax.plot(t, msd, "o", color=C.blue, gid="points")        # there from the start; id "msd-points"
+ax.plot(t, slope * t, color=C.accent, gid="s2-fit")     # appears with sentence 2; id "msd-fit"
 figure(fig, "msd")                            # writes build/fig/msd.html and closes fig
 ```
 
-On the slide: `{{< include build/fig/msd.html >}}`, usually inside a column, whose
-width it fills.
+On the slide: `{{< include build/fig/msd.html >}}` inside `::: {.fig}`, `::: {.art}` or
+a pinned block; the figure fills that box.
 
-- `gid="sN-name"`: the part appears with sentence N of its slide (counted from 1) and
-  gets the id `<figure>-<name>`. `gid="name"` only names it. Use the id in `point=` and
-  `grow=`, and Alt+click on the part replays its sentence.
+- **Size.** Draw a figure at the size of its box, at 100 px per inch of the frame. Text
+  sizes are then the video's points: ticks 18, axis labels 20 (the defaults), labels in
+  the picture 22 or more. `FIG` is the `.fig` box of `.beside` and `PLOT` the place of
+  its axes; `ART` is the picture box of a title or divider card. For a pinned block of
+  42 % x 66 % of the frame, `figsize=(8.06, 7.13)`.
+- **Parts.** `gid="sN-name"`: the part appears with sentence N of its slide (counted
+  from 1) and gets the id `<figure>-<name>`. `gid="name"` only names it. Use the id in
+  `point=` and `grow=`; Alt+click on the part replays its sentence.
 - Sentence numbers count the slide's `say` blocks, silent steps included. The figure
   does not know which slide it is on: if the slide's sentences are reordered, renumber
   the gids.
-- One figure per slide position. For two states of one plot, use parts that appear,
-  not two figures on top of each other.
-- Text in the figure stays text and takes the slide's font, so set sizes in points that
-  work at the figure's `figsize` (13 or more for a figure that fills half a slide), and
-  prefer plain Unicode ("Δr", "⟨Δr²⟩") over mathtext.
-- Colours: `from narrate import C` and draw with `C.blue`, `C.green`, `C.purple` (the
-  three series), `C.accent` (what the talk points at), `C.ink`, `C.muted`, `C.light`.
-  Text, axes and the colour cycle follow the theme already. Give each colour one
-  meaning for the whole talk.
+- One figure per box. For two states of one plot, use parts that appear, not two
+  figures on top of each other.
+- Text in the figure stays text and is set in the theme's font. Prefer plain Unicode
+  ("Δr", "⟨Δr²⟩") to mathtext.
+- **Colours.** Draw with `C.blue`, `C.green`, `C.purple` (the three series), `C.accent`
+  (what the talk points at), `C.ink`, `C.muted`, `C.light`. Text, axes and the colour
+  cycle follow the theme already. Give each colour one meaning for the whole talk.
 - An arrow that should appear by itself is a `FancyArrowPatch` with its own gid; an
   `annotate()` arrow cannot be named.
 
@@ -210,8 +242,7 @@ another colour.
 ## Front matter
 
 ```yaml
-title-slide-attributes:
-  data-say: "First sentence.|Second sentence."
+pagetitle: "The talk's title"   # the footer's text; not `title:`
 narrate:
   voice: af_heart        # Kokoro voice; af_/am_ American, bf_/bm_ British
   speed: 1.0             # speaking rate
@@ -230,7 +261,9 @@ format:
     width: 1920
     height: 1080
     margin: 0                        # the frame has its own margins
-    progress: true                   # the bar along the bottom edge, as in the videos
+    center: false
+    slide-number: false              # the player draws the frame: section, talk title,
+    progress: false                  #   "n / N" and the progress bar
     embed-resources: true            # keep: this is what makes the page work offline
     self-contained-math: true
     html-math-method: katex
