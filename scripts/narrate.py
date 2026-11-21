@@ -10,17 +10,24 @@ The steps, in order:
   5. a run-through in headless Chromium, offline: every sentence reached in order, the equations rendered, nothing
      outside its slide, nothing loaded from the network.
 
-  --script     print the narration with words, seconds and audio file per sentence; build nothing
-  --shots      after the build: a screenshot of every slide's last stage in build/shots/ (contact sheets with pillow)
-  --no-check   skip step 5
-  --voices     list the voices
+  --script       print the narration with words, seconds and audio file per sentence; build nothing
+  --shots        after the build: a screenshot of every slide's last stage in build/shots/ (contact sheets with pillow)
+  --shots=all    ... and of every sentence of every slide (build/shots/all/NN-K.png)
+  --size=WxH     the size of the screenshots (default 1280x720)
+  --themes       run the check in every theme the talk can be switched to, not only the one it opens in
+  --no-check     skip step 5
+  --voices       list the voices
+  --version      the version of the skill these files come from
 
 Settings, in the deck's front matter (all optional):
     narrate: {voice: af_heart, speed: 1.0, lang: en-us, lead: 0.7, gap: 0.4, tail: 1.0, spoken: {"Péclet": "Pay-clay"},
-              embed: true, theme: light}
+              embed: true, theme: light, switch: true, keys: {theme: false}}
 theme: one of THEMES below, or colours of your own on a base, {base: light, accent: "#0b7285"}. It is the theme the
 talk opens in; all of THEMES travel in the page and the viewer can switch between them (key Y, or ?theme=dark in the
 address). Figures drawn with `C` follow, because figure() writes the theme's colours into the SVG by name.
+switch: false locks the talk to its theme (for a talk whose clips, images or narration fix the colours).
+keys: the player's keys by action (play, next, prev, up, down, first, last, captions, outline, voice, auto, theme, hide,
+help, number, reveal); a letter renames one, false frees it.
 embed: the speech goes into talk.html (one file to send); false leaves it in media/audio/ beside the page.
 An mp3 that already exists in media/audio/ under a sentence's name is used as it is, so a recorded voice or another
 speech engine can replace Kokoro file by file (`--script` prints the names).
@@ -40,6 +47,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+VERSION = "0.2.0"  # of the skill; the player (narrate.js) carries the same number
 WPM = 155  # spoken words per minute, pauses included
 LONG = 45  # words; a longer sentence is flagged
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
@@ -78,10 +86,27 @@ PALETTES = {}  # what the page can switch between: name -> the eight colours and
 
 
 # ---------------------------------------------------------------- for figures.py
+def named(svg):
+    """The SVG with every colour that is one of the theme's written by its name, so that it follows a change of theme."""
+    names = {}
+    for k in ("ink", "muted", "light", "accent", "blue", "green", "purple", "bg"):
+        names.setdefault(str(getattr(C, k, "")).lower(), k)
+    return re.sub(r"#[0-9a-fA-F]{6}\b", lambda m: f"var(--{names[m.group(0).lower()]})" if m.group(0).lower() in names else m.group(0), svg)
+
+
+def mark(name, ax, x, y, r=0.024):
+    """A pointer target at the data point (x, y), as the video engine's mark(): an invisible dot of radius r (in units
+    of the frame's height) that `point="#<figure>-<name>"` rings. The figure must be drawn at 100 px per inch."""
+    ax.plot([x], [y], "o", ms=2 * r * 1080 * 0.72, alpha=0, gid=name, clip_on=False)
+
+
 def figure(fig, name):
     """Write build/fig/<name>.html, the matplotlib figure as inline SVG; put it on a slide with
-    {{< include build/fig/<name>.html >}}. An artist with gid="s2-fit" gets the id "<name>-fit" and appears with
-    sentence 2 of its slide; a gid without "sN-" only names the part ("<name>-<gid>"), for point= and grow=."""
+    {{< include build/fig/<name>.html >}}. The gid of an artist names it and says when it shows:
+      gid="fit"       only names the part: id "<name>-fit", for point= and grow=
+      gid="s2-fit"    appears with sentence 2 of its slide
+      gid="s2-4-fit"  appears with sentence 2 and is gone from sentence 4 on
+      gid="s2-d4-fit" appears with sentence 2 and is dimmed from sentence 4 on"""
     import io
 
     import matplotlib.pyplot as plt
@@ -91,18 +116,14 @@ def figure(fig, name):
         fig.savefig(buf, format="svg", transparent=True, metadata={"Date": None})
     plt.close(fig)
     s = buf.getvalue()
-    s = re.sub(r"<metadata>.*?</metadata>\s*", "", s[s.index("<svg"):], flags=re.S)
-    # a colour of the theme is written by its name, so that the figure follows a change of theme in the browser
-    names = {}
-    for k in ("ink", "muted", "light", "accent", "blue", "green", "purple", "bg"):
-        names.setdefault(str(getattr(C, k, "")).lower(), k)
-    s = re.sub(r"#[0-9a-fA-F]{6}\b", lambda m: f"var(--{names[m.group(0).lower()]})" if m.group(0).lower() in names else m.group(0), s)
+    s = named(re.sub(r"<metadata>.*?</metadata>\s*", "", s[s.index("<svg"):], flags=re.S))
 
     def ident(m):
-        k, part = re.fullmatch(r"(?:s(\d+)-)?(.+)", m.group(1)).groups()
+        k, dim, end, part = re.fullmatch(r"(?:s(\d+)(?:-(d?)(\d+))?-)?(.+)", m.group(1)).groups()
         k = int(k or 1) - 1  # the sentence that introduces the part, counted from 0 as the player does
-        return f'id="{name}-{part}"' + (f' class="fragment" data-fragment-index="{k - 1}"' if k else "") + (
-            f' data-k="{k}"' if m.group(1) != part or k else "")
+        return (f'id="{name}-{part}"' + (f' class="fragment" data-fragment-index="{k - 1}"' if k else "")
+                + (f' data-k="{k}"' if m.group(1) != part or k else "")
+                + (f' data-{"dim" if dim else "until"}="{int(end) - 1}"' if end else ""))
 
     s = re.sub(r'\bid="([^"]+)"', ident, s)
     s = re.sub(r"url\(#([^)]+)\)", rf"url(#{name}-\1)", s)
@@ -141,7 +162,7 @@ def theme(spec):
 
 
 def font_faces(family):
-    """@font-face rules carrying the font's regular, semibold and italic cuts (subset to GLYPHS), so that the talk
+    """@font-face rules carrying the font's regular, semibold, bold and italic cuts (subset to GLYPHS), so that the talk
     looks the same on a machine without the font. '' when this machine lacks the font or the tools."""
     try:
         import io
@@ -154,7 +175,7 @@ def font_faces(family):
         return ""
     logging.getLogger("fontTools").setLevel(logging.ERROR)  # no notes about tables it leaves out
     css = ""
-    for weight, style in ((400, "normal"), (600, "normal"), (400, "italic")):
+    for weight, style in ((400, "normal"), (600, "normal"), (700, "normal"), (400, "italic")):
         try:
             path = fm.findfont(fm.FontProperties(family=family, weight=weight, style=style), fallback_to_default=False)
         except ValueError:
@@ -175,11 +196,12 @@ def stack(font):
     return f'"{font}", ' + ("Georgia, serif" if serif else 'system-ui, -apple-system, "Segoe UI", sans-serif')
 
 
-def apply_theme(spec, drawing):
+def apply_theme(spec, drawing, switch=True):
     """The talk's theme: build/theme.scss for the slides (its values, and the fonts of every theme), PALETTES for the
-    page's theme switch, C and matplotlib's defaults for figures.py. Returns the theme's name."""
+    page's theme switch (only this theme with switch=False), C and matplotlib's defaults for figures.py. Returns the
+    theme's name."""
     name = spec if isinstance(spec, str) else "custom"
-    all_ = {n: theme(n) for n in THEMES} | {name: theme(spec)}
+    all_ = ({n: theme(n) for n in THEMES} if switch else {}) | {name: theme(spec)}
     th = all_[name]
     C.__dict__.update(th)
     PALETTES.update({n: {k: v for k, v in t.items() if k != "font"} | {"font": stack(t["font"])} for n, t in all_.items()})
@@ -272,8 +294,8 @@ def kokoro():
 
 
 def settings(meta):
-    c = dict(voice="af_heart", speed=1.0, lead=0.7, gap=0.4, tail=1.0, spoken={}, embed=True, theme="light") | (
-        meta.get("narrate") or {})
+    c = dict(voice="af_heart", speed=1.0, lead=0.7, gap=0.4, tail=1.0, spoken={}, embed=True, theme="light", switch=True,
+             keys={}) | (meta.get("narrate") or {})
     c.setdefault("lang", LANG.get(c["voice"][0], "en-us"))
     return c
 
@@ -284,6 +306,21 @@ def mp3(sentence, c):
         sentence = sentence.replace(a, b)
     key = hashlib.sha1(f"{c['voice']}|{c['speed']}|{c['lang']}|{sentence}".encode()).hexdigest()[:16]
     return MEDIA / "audio" / f"{key}.mp3", sentence
+
+
+def letters(sentence):
+    """A sentence's letters and digits: by these the page notices narration that changed after the build."""
+    return re.sub(r"[\W_]", "", sentence).lower()
+
+
+def manifest(say, c, name, path=None):
+    """Write the page's manifest: say is [{src, dur, t}] in the order of the slides' spoken sentences (t = letters()).
+    For a talk whose speech exists already (a conversion of a video), build `say` yourself and call this."""
+    path = path or MEDIA / "manifest.js"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("window.TALK = " + json.dumps(dict(
+        version=VERSION, lead=c["lead"], gap=c["gap"], tail=c["tail"], pre=0.2, theme=name, themes=PALETTES,
+        keys=c.get("keys") or {}, say=say)) + ";\n")
 
 
 def speech(sentences, c, embed):
@@ -300,8 +337,7 @@ def speech(sentences, c, embed):
             soundfile.write(p, a, sr, format="MP3")
             print(f"  spoke: {s[:70]}", flush=True)
         src = "data:audio/mpeg;base64," + base64.b64encode(p.read_bytes()).decode() if embed else p.as_posix()
-        # t: the sentence's letters and digits, by which the page notices narration that changed after this build
-        out.append(dict(src=src, dur=round(soundfile.info(p).duration, 3), t=re.sub(r"[\W_]", "", s).lower()))
+        out.append(dict(src=src, dur=round(soundfile.info(p).duration, 3), t=letters(s)))
     return out
 
 
@@ -314,9 +350,11 @@ def chromium(*args, timeout=600):
                            "--host-resolver-rules=MAP * ~NOTFOUND", *args], capture_output=True, text=True, timeout=timeout).stdout
 
 
-def check(html, seconds):
-    """Play the talk through at 50x without sound and with the network cut. Returns the number of slides."""
-    dom = chromium(f"--virtual-time-budget={int(60_000 + 40 * seconds * 1000 / 50 * 2)}", "--dump-dom", f"{html.resolve().as_uri()}?fast")
+def check(html, seconds, theme=None):
+    """Play the talk through at 50x without sound and with the network cut (in `theme`, else the one it opens in).
+    Returns the positions reached, [(slide, sentence)]."""
+    dom = chromium(f"--virtual-time-budget={int(60_000 + 40 * seconds * 1000 / 50 * 2)}", "--dump-dom",
+                   f"{html.resolve().as_uri()}?fast" + (f"&theme={theme}" if theme else ""))
     body = re.search(r"<body[^>]*>", dom)
     if not body:
         sys.exit("check: Chromium returned no page")
@@ -340,19 +378,22 @@ def check(html, seconds):
     if d.get("hidden"):
         bad.append(f"content that no sentence reveals (a fragment or `. . .` pause of your own; stage with say blocks): {d['hidden']}")
     if bad:
-        sys.exit("check failed:\n- " + "\n- ".join(bad))
-    n = log[-1][0]
-    print(f"check: {len(log)} steps on {n} slides reached in order, equations rendered, nothing outside a slide or left hidden, offline")
-    return n
+        sys.exit(f"check failed{f' in theme {theme}' if theme else ''}:\n- " + "\n- ".join(bad))
+    print(f"check{f' ({theme})' if theme else ''}: {len(log)} steps on {log[-1][0]} slides reached in order, equations rendered, "
+          "nothing outside a slide or left hidden, offline")
+    return log
 
 
-def shots(html, n):
-    out = BUILD / "shots"
-    out.mkdir(parents=True, exist_ok=True)
+def shots(html, log, every=False, size="1280x720"):
+    """A screenshot of every slide at its last sentence (and, with every, of every sentence); log is check()'s result."""
+    out, n, win = BUILD / "shots", log[-1][0], "--window-size=" + size.replace("x", ",")
+    (out / "all").mkdir(parents=True, exist_ok=True)
     files = [out / f"{i:02d}.png" for i in range(1, n + 1)]
+    jobs = [(f"#{i}", f) for i, f in enumerate(files, 1)] + ([(f"#{a}.{b}", out / "all" / f"{a:02d}-{b}.png") for a, b in log] if every else [])
     with ThreadPoolExecutor(4) as ex:
-        list(ex.map(lambda a: chromium("--window-size=1280,720", "--virtual-time-budget=4000", f"--screenshot={a[1]}",
-                                       f"{html.resolve().as_uri()}?shot#{a[0]}"), enumerate(files, 1)))
+        list(ex.map(lambda j: chromium(win, "--virtual-time-budget=4000", f"--screenshot={j[1]}", f"{html.resolve().as_uri()}?shot{j[0]}"), jobs))
+    if every:
+        print(f"shots: {len(log)} sentences in {out}/all/")
     try:
         from PIL import Image
     except ImportError:
@@ -360,7 +401,7 @@ def shots(html, n):
     for j in range(0, n, 9):  # nine slides to a sheet
         sheet = Image.new("RGB", (1920, 1080), "white")
         for i, f in enumerate(files[j:j + 9]):
-            sheet.paste(Image.open(f).resize((640, 360)), (640 * (i % 3), 360 * (i // 3)))
+            sheet.paste(Image.open(f).convert("RGB").resize((640, 360)), (640 * (i % 3), 360 * (i // 3)))
         sheet.save(out / f"sheet-{j // 9 + 1}.png")
     print(f"shots: {len(files)} in {out}/, contact sheets sheet-*.png")
 
@@ -368,16 +409,20 @@ def shots(html, n):
 # ---------------------------------------------------------------- main
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    flags = {a for a in sys.argv[1:] if a.startswith("--")}
-    if unknown := flags - {"--script", "--shots", "--no-check", "--voices"}:
+    opts = dict(a.split("=", 1) if "=" in a else (a, "") for a in sys.argv[1:] if a.startswith("--"))
+    flags = set(opts)
+    if unknown := flags - {"--script", "--shots", "--size", "--themes", "--no-check", "--voices", "--version"}:
         sys.exit(f"unknown option {sorted(unknown)}\n{__doc__}")
+    if "--version" in flags:
+        return print(VERSION)
     if "--voices" in flags:
         return print(" ".join(sorted(kokoro().get_voices())))
     qmd = Path(args[0] if args else "talk.qmd").resolve()
     os.chdir(qmd.parent)
     name = None
     if "--script" not in flags:
-        name = apply_theme(settings(read(qmd, strict=False)[0])["theme"], Path("figures.py").exists())
+        c0 = settings(read(qmd, strict=False)[0])
+        name = apply_theme(c0["theme"], Path("figures.py").exists(), c0["switch"])
         if Path("figures.py").exists():
             sys.modules["narrate"] = sys.modules[__name__]  # figures.py does `from narrate import figure, values, C`
             runpy.run_path("figures.py", run_name="__main__")
@@ -393,16 +438,19 @@ def main():
                 print(f"   {mp3(s, c)[0].name}  {w:3d} w{'  LONG' if w > LONG else ''}  {s}")
         return print(f"\n{len(deck)} slides, {len(sentences)} sentences, {words} words, about {words / WPM:.1f} min at {WPM} words per minute")
     say = speech(sentences, c, c["embed"])
-    (MEDIA / "manifest.js").write_text("window.TALK = " + json.dumps(dict(
-        lead=c["lead"], gap=c["gap"], tail=c["tail"], pre=0.2, theme=name, themes=PALETTES, say=say)) + ";\n")
+    manifest(say, c, name)
     seconds = sum(s["dur"] + c["gap"] for s in say) + len(deck) * (c["lead"] + c["tail"])
     print(f"speech: {len(say)} sentences, {seconds / 60:.1f} min with pauses, voice {c['voice']}; theme {name}", flush=True)
     subprocess.run(["quarto", "render", qmd.name], check=True)
     html = qmd.with_suffix(".html")
-    if "--no-check" not in flags or "--shots" in flags:
-        n = check(html, seconds)
+    if "--no-check" not in flags or "--shots" in flags or "--themes" in flags:
+        log = check(html, seconds)
+        if "--themes" in flags:
+            for t in PALETTES:
+                if t != name:
+                    check(html, seconds, t)
         if "--shots" in flags:
-            shots(html, n)
+            shots(html, log, opts["--shots"] == "all", opts.get("--size") or "1280x720")
     print(f"talk: {html}  ({html.stat().st_size / 1e6:.1f} MB)")
 
 

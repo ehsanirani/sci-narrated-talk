@@ -116,6 +116,8 @@ and labels, the bullets, the note and the footer sit within 3 px of the video fr
 | A | auto-advance on / off | | | |
 | Y | next theme | | | |
 | X | hide / show the bar | | | |
+| # | slide number on / off | | | |
+| R, then a key | that key as reveal.js has it (R ? its keys, R M its menu) | | | |
 | ? | help | | | |
 
 - The bar lies over the foot of the slide and fades while the talk plays and the mouse
@@ -128,8 +130,10 @@ and labels, the bullets, the note and the footer sit within 3 px of the video fr
 - With the voice off the talk runs on silently at the same pace; with auto-advance off
   it waits at the end of each slide.
 - The address bar shows `#slide.sentence`; such a link opens the talk there.
-- Keys with Ctrl, Alt or Meta are left to the browser, and every other reveal.js key
-  keeps its meaning. In the speaker view (S) the notes are the slide's narration and
+- The talk handles its keys before reveal.js and does not enter them in its table, so
+  every other reveal.js key keeps its meaning and R reaches the shadowed ones. Keys
+  can be renamed or freed in the front matter; keys with Ctrl, Alt or Meta are left to
+  the browser. In the speaker view (S) the notes are the slide's narration and
   the previews stay silent.
 
 ## Themes

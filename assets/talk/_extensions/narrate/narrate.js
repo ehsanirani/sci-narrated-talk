@@ -4,8 +4,11 @@
  * (n >= 2) becomes a reveal fragment, so reveal's own machinery shows it when sentence n starts; every sentence is itself
  * a hidden fragment, so reveal's position (slide, fragment f) is always "sentence f + 1 of that slide".
  * A block without text is a silent step of wait= seconds (default 3); a slide without blocks is one silent step.
- * Attributes of a block: point="#id" (a ring closes in on that element), grow="#id" (that SVG path is drawn while the
- * sentence is spoken), label="..." (the outline's name for a silent step), wait="2".
+ * Attributes of a block: point="#a; #b@a phrase" (a pointer on #a for the sentence, on #b from that phrase on: a ring on
+ * a point of a figure, a box around anything else), grow="#id" with="#dots" (that SVG line is drawn while the sentence
+ * is spoken, and markers appear as it passes), label="..." (the outline's name for a silent step), wait="2".
+ * Attributes of any other block: at="2" (appears with sentence 2 whatever its place in the source; a .note is there from
+ * the start). Of a clip: data-clock="sentence" (starts with the sentence that reveals it), data-once, data-loop.
  * The title slide takes its narration from title-slide-attributes: data-say: "First sentence.|Second sentence."
  *
  * Audio: window.TALK (media/manifest.js, written by narrate.py) lists the spoken sentences in document order (src, dur)
@@ -14,7 +17,9 @@
  * Player: a bar over the bottom of the slide (fades when the mouse rests while playing) with a timeline (one segment per
  * slide, as wide as the slide is long; one per section when slides would be < 10 px; none on a phone), and an outline.
  * Keys: <- -> slide, up/down sentence, space pause/resume, C captions, T outline, M voice on/off, A auto-advance,
- * Y next theme, X hide the bar, ? help; nothing with Ctrl/Alt/Meta; every other key stays reveal's. Each button prints its key.
+ * Y next theme, X hide the bar, ? help; nothing with Ctrl/Alt/Meta. They are handled before reveal.js and not entered in
+ * its table, so R and then a key gives that key to reveal.js and its plugins (R ?: its list of keys, R M: its menu).
+ * window.TALK.keys renames or frees them. Each button prints its key.
  * Alt+click on an element replays the sentence that introduced it (data-k); Ctrl+click is reveal's zoom.
  * URL: #n.k = slide n, sentence k (1-based). ?fast: no audio, 50x speed; body[data-log] lists the visited positions,
  * body[data-over] what reaches outside its slide, body[data-done] the end. ?shot: no player, no transitions; #n alone
@@ -25,7 +30,9 @@
  */
 window.RevealNarrate = () => {
   let deck, T, N, slides, h = 0, k = 0, playing = false, auto = true, phase = 'idle', tok = 0, timer = null;
-  let D, S0, TOTAL, groups, secOf, SEC, items = [], built = -1, idleT, theme;
+  let D, S0, TOTAL, groups, secOf, SEC, items = [], built = -1, idleT, theme, cues = [], raw = 0, rawT;
+  const VERSION = '0.2.0', ARC = new WeakMap();
+  let numFmt = 'c/t';
   const opened = new Set();  // outline parts the viewer opened by hand (or that the browser's find opened)
   const q = new URLSearchParams(location.search), FAST = q.has('fast'), SHOT = q.has('shot'), TL = q.get('tl');
   const RECV = q.has('receiver');  // one of the two previews in reveal's speaker view (S): follows the main window, silent
@@ -37,6 +44,16 @@ window.RevealNarrate = () => {
   const words = s => s.trim().replace(/\s+/g, ' ');
   const short = s => { const w = s.split(' '); return w.length > 11 ? w.slice(0, 10).join(' ') + ' …' : s; };
   const heading = e => e ? words([...e.childNodes].filter(n => !n.matches?.('.part, .eyebrow')).map(n => n.textContent).join('')) : '';
+  // the talk's keys: action -> key (lower case, or the key's name); the manifest's keys: override them
+  const KEYS = {play: ' ', next: 'ArrowRight', prev: 'ArrowLeft', down: 'ArrowDown', up: 'ArrowUp', first: 'Home', last: 'End',
+                captions: 'c', outline: 't', voice: 'm', auto: 'a', theme: 'y', hide: 'x', help: '?', number: '#', reveal: 'r'};
+  const HELP = [['play', 'play / pause'], ['prev next', 'previous / next slide'], ['up down', 'previous / next sentence'],
+                ['first last', 'first / last slide'], ['captions', 'captions'], ['outline', 'outline'],
+                ['voice', 'voice on / off; the talk keeps its pace'], ['theme', 'next theme (colours and font)'],
+                ['auto', 'auto-advance to the next slide on / off'], ['hide', 'hide / show the bar'],
+                ['number', 'slide number on / off'], ['help', 'this help']];
+  const NAME = {' ': 'space', ArrowRight: '→', ArrowLeft: '←', ArrowDown: '↓', ArrowUp: '↑'};
+  const kbd = a => (KEYS[a] ? `<kbd>${NAME[KEYS[a]] || (KEYS[a].length === 1 ? KEYS[a].toUpperCase() : KEYS[a])}</kbd>` : '');
   const titleOf = j => heading(slides[j].querySelector('h1, h2')) || SEC[j] || document.title;
 
   // ------------------------------------------------------------ sentences -> reveal fragments
@@ -45,14 +62,16 @@ window.RevealNarrate = () => {
     ss.forEach((s, j) => { if (j) { s.classList.add('fragment'); s.dataset.fragmentIndex = j - 1; } });
     let cur = 0;
     sec.dataset.k = 0;
-    sec.querySelectorAll('video').forEach(v => Object.assign(v, {muted: true, loop: true, controls: false, playsInline: true}));
+    sec.querySelectorAll('video').forEach(v => Object.assign(v, {muted: true, controls: false, playsInline: true}));
     (function visit(el) {
       for (const c of [...el.children]) {
         if (c.classList.contains('say')) { cur = ss.indexOf(c); continue; }
         if (c.querySelector('.say')) { visit(c); continue; }
-        if (!c.classList.contains('fragment') && cur > 0) { c.classList.add('fragment'); c.dataset.fragmentIndex = cur - 1; }
+        // at="2" pins a block to sentence 2 whatever its place in the source; a note is there from the start
+        const kk = c.dataset.at ? Math.min(ss.length, +c.dataset.at) - 1 : c.matches('.note') ? 0 : cur;
+        if (!c.classList.contains('fragment') && kk > 0) { c.classList.add('fragment'); c.dataset.fragmentIndex = kk - 1; }
         if (c.dataset.k === undefined)
-          c.dataset.k = c.classList.contains('fragment') && !c.classList.contains('fade-out') ? +c.dataset.fragmentIndex + 1 : cur;
+          c.dataset.k = c.classList.contains('fragment') && !c.classList.contains('fade-out') ? +c.dataset.fragmentIndex + 1 : kk;
       }
     })(sec);
     if (!sec.querySelector('aside.notes'))  // reveal's speaker view (S) shows the slide's narration as its notes
@@ -65,24 +84,26 @@ window.RevealNarrate = () => {
     $('#nar-cap span').textContent = s ? s.textContent.trim() : '';
     fit(sec);
     $('#nar-sec').textContent = SEC[h];  // the slide's frame: section, "n / N", progress
-    $('#nar-no').textContent = `${h + 1} / ${N}`;
     $('#nar-prog b').style.width = (h + 1) / N * 100 + '%';
     $('#nar-num').textContent = `${h + 1} / ${N}`;
     if (built !== h) layout();
     syncOutline();
     history.replaceState(null, '', `${location.pathname}${location.search}#${h + 1}.${k + 1}`);
     body.dataset.log = (body.dataset.log || '') + `${h + 1}.${k + 1} `;
-    document.querySelectorAll('.nar-ptr').forEach(e => e.remove());
-    const t = s && s.dataset.point && sec.querySelector(s.dataset.point);
-    if (t) {  // a ring closing in on the named element
-      const r = t.getBoundingClientRect(), b = sec.getBoundingClientRect(), sc = deck.getScale(), p = document.createElement('div');
-      const pad = deck.getConfig().width / 140;  // sizes in the slide's own units, whatever its canvas
-      p.className = 'nar-ptr';
-      Object.assign(p.style, {left: (r.left - b.left) / sc - pad + 'px', top: (r.top - b.top) / sc - pad + 'px',
-                              width: r.width / sc + 2 * pad + 'px', height: r.height / sc + 2 * pad + 'px',
-                              borderWidth: pad * 0.45 + 'px', borderRadius: pad + 'px'});
-      sec.appendChild(p);
+    for (const e of sec.querySelectorAll('[data-until], [data-dim]')) {  // figure parts that leave or dim (gid sA-B-, sA-dB-)
+      e.classList.toggle('nar-gone', e.dataset.until !== undefined && k >= +e.dataset.until);
+      e.classList.toggle('nar-dim', e.dataset.dim !== undefined && k >= +e.dataset.dim);
     }
+    // point="#a; #b@a phrase": #a for the whole sentence, #b from where the phrase stands in it until the next phrased one
+    document.querySelectorAll('.nar-ptr').forEach(e => e.remove());
+    cues = [];
+    const said = s ? words(s.textContent).toLowerCase() : '';
+    for (const part of (s?.dataset.point || '').split(';').map(x => x.trim()).filter(Boolean)) {
+      const [sel, phrase] = part.split('@').map(x => x.trim());
+      const from = phrase ? Math.max(0, said.indexOf(phrase.toLowerCase())) / Math.max(1, said.length) : -1;
+      for (const t of sec.querySelectorAll(sel)) cues.push({from, el: pointer(sec, t)});
+    }
+    cue();
     if (FAST && k === says(h).length - 1) {  // the check run: what reaches outside the slide once all of it shows
       const b = deck.getSlidesElement().getBoundingClientRect();
       const out = [...sec.querySelectorAll('h1, h2, p, li, td, img, video, svg.nar-fig, .katex-display')].filter(e => {
@@ -94,13 +115,57 @@ window.RevealNarrate = () => {
       if (sec.querySelector('.fragment:not(.visible):not(.say):not(.fade-out)')) body.dataset.hidden = (body.dataset.hidden || '') + `slide ${h + 1}; `;
     }
   }
-  function media(seek) {  // the slide's clips run on the scene's clock, as in the video
-    const say = T.scenes[h].say, at = k ? say[k].t0 - T.pre : 0;
+  // A sketched pointer on one target: a ring on a point of a figure (a small, roughly square part, such as the mark
+  // that narrate.mark() draws), a box around anything else. Sizes are the video engine's, in the slide's own units.
+  function pointer(sec, t) {
+    const r = t.getBoundingClientRect(), b = sec.getBoundingClientRect(), sc = deck.getScale(), p = document.createElement('div');
+    const H = deck.getConfig().height, pad = H / 80, w = r.width / sc, hh = r.height / sc;
+    const ring = t.closest('svg') && Math.max(w, hh) < H * 0.25 && Math.min(w, hh) / Math.max(w, hh, 1e-9) > 0.6;
+    const R = Math.max(H * 0.024, Math.max(w, hh) / 2), cx = (r.left - b.left) / sc + w / 2, cy = (r.top - b.top) / sc + hh / 2;
+    p.className = 'nar-ptr' + (ring ? ' ring' : '');
+    Object.assign(p.style, ring ? {left: cx - R + 'px', top: cy - R + 'px', width: 2 * R + 'px', height: 2 * R + 'px', borderWidth: pad * 0.46 + 'px'}
+      : {left: cx - w / 2 - pad + 'px', top: cy - hh / 2 - pad + 'px', width: w + 2 * pad + 'px', height: hh + 2 * pad + 'px',
+         borderWidth: pad * 0.41 + 'px', borderRadius: pad + 'px'});
+    sec.appendChild(p);
+    return p;
+  }
+  function cue() {  // which phrased pointers show now: the one whose phrase the voice has reached last
+    if (!cues.length) return;
+    const s = T.scenes[h].say[k];
+    const x = phase === 'say' && !FAST && s.src ? audio.currentTime / s.dur : phase === 'idle' && !SHOT && !FAST ? 0 : 1;
+    const on = Math.max(-1, ...cues.filter(c => c.from >= 0 && c.from <= x).map(c => c.from));
+    for (const c of cues) c.el.classList.toggle('off', c.from >= 0 && c.from !== on);
+  }
+  // The slide's clips. A clip runs on the slide's clock, as a scene of a video does (data-clock="sentence": on the clock
+  // of the sentence that reveals it, starting at 0 with it). It is set to its time again at every sentence, because the
+  // voice and the clock part by a little with each one. It loops unless it is about as long as what it accompanies
+  // (data-once / data-loop decide otherwise); a clip that plays once holds its last frame.
+  function media(seek) {
+    const say = T.scenes[h].say, now = SHOT ? say[k].t0 + say[k].dur : k ? say[k].t0 - T.pre : 0;
     slides[h].querySelectorAll('video').forEach(v => {
-      const go = () => { if (seek && Math.abs(v.currentTime - at) > 0.3) v.currentTime = at % (v.duration || 1e9);
-                         playing ? v.play().catch(() => {}) : v.pause(); };
+      const go = () => {
+        const k0 = +(v.closest('[data-k]')?.dataset.k || 0), own = v.dataset.clock === 'sentence';
+        const base = own && k0 ? say[Math.min(k0, say.length - 1)].t0 - T.pre : 0, len = v.duration || 1e9;
+        const once = 'once' in v.dataset || (!('loop' in v.dataset) && len >= D[h] - base - 1.5);
+        const at = once ? Math.min(Math.max(0, now - base), len - 0.04) : Math.max(0, now - base) % len;
+        v.loop = !once;
+        if (seek && Math.abs(v.currentTime - at) > 0.06) v.currentTime = at;
+        playing && !(own && k < k0) && !(once && at >= len - 0.05) ? v.play().catch(() => {}) : v.pause();
+      };
       v.readyState ? go() : v.addEventListener('loadedmetadata', go, {once: true});
     });
+  }
+  // where along the path p an element sits, 0 to 1; markers are matched in order, so a path that crosses itself is fine
+  function along(p, els) {
+    const L = p.getTotalLength(), m = p.getScreenCTM(), n = 600, pts = [];
+    for (let i = 0; i <= n; i++) { const q = p.getPointAtLength(L * i / n); pts.push([q.x * m.a + q.y * m.c + m.e, q.x * m.b + q.y * m.d + m.f]); }
+    let from = 0;
+    for (const el of els) {
+      const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      let best = from, bd = Infinity;
+      for (let i = from; i <= n; i++) { const d = (pts[i][0] - cx) ** 2 + (pts[i][1] - cy) ** 2; if (d < bd - 0.5) { bd = d; best = i; } }
+      ARC.set(el, best / n); from = best;
+    }
   }
   function ui() {
     $('#nar-play').textContent = playing ? '❚❚' : '▶';
@@ -136,7 +201,7 @@ window.RevealNarrate = () => {
   }
   function done() {
     phase = 'after';
-    if (k < says(h).length - 1) wait(T.gap - T.pre, () => { place(h, k + 1); wait(T.pre, speak); });
+    if (k < says(h).length - 1) wait(T.gap - T.pre, () => { place(h, k + 1); media(true); wait(T.pre, speak); });
     else if (auto && h < N - 1) wait(T.tail, () => { place(h + 1, 0); media(true); wait(T.lead, speak); });
     else { playing = false; phase = 'end'; ui(); if (h === N - 1) body.dataset.done = 1; }
   }
@@ -163,13 +228,18 @@ window.RevealNarrate = () => {
     const c = $('#nar-segs i.cur b'), t = local();
     if (c) c.style.width = Math.min(100, t / D[h] * 100) + '%';
     $('#nar-time').textContent = `${fmt(S0[h] + t)} / ${fmt(TOTAL)}`;
-    says(h).forEach((s, j) => {
-      const p = s.dataset.grow && slides[h].querySelector(s.dataset.grow + ' path, path' + s.dataset.grow);
+    cue();
+    says(h).forEach((s, j) => {  // grow="#id": the line is drawn while the sentence is spoken, and the markers on it
+      const g = s.dataset.grow && slides[h].querySelector(s.dataset.grow);  // (its own, and those of with="#id") appear as it passes
+      const p = g && (g.matches('path') ? g : g.querySelector('path'));
       if (!p) return;
       const L = p.getTotalLength();
       const x = SHOT || FAST || k > j ? 1 : k < j ? 0 : phase === 'say' ? Math.min(1, audio.currentTime / T.scenes[h].say[j].dur) : phase === 'after' ? 1 : 0;
       p.style.strokeDasharray = L;
       p.style.strokeDashoffset = L * (1 - x);
+      const marks = [...g.querySelectorAll('use'), ...(s.dataset.with ? slides[h].querySelectorAll(`${s.dataset.with} use`) : [])];
+      if (marks.length && !ARC.has(marks[0]) && g.getBoundingClientRect().width) along(p, marks);
+      for (const e of marks) e.style.visibility = x >= (ARC.get(e) ?? 0) ? '' : 'hidden';
     });
     requestAnimationFrame(tick);
   }
@@ -267,22 +337,19 @@ window.RevealNarrate = () => {
   function chrome() {
     document.body.insertAdjacentHTML('beforeend', `
 <div id="nar-bar"><div id="nar-tl"><div id="nar-labs"></div><div id="nar-segs"></div><div id="nar-tip"></div></div>
-<div class="row"><button id="nar-play" title="play (space)">▶</button><kbd>space</kbd><span id="nar-time"></span><span id="nar-num"></span>
-<span class="sp"></span><button id="nar-voice" title="voice (M): off, the talk runs on silently at the same pace" aria-pressed="true">voice<kbd>M</kbd></button>
-<button id="nar-theme" title="next theme (Y)"><span></span><kbd>Y</kbd></button>
-<button id="nar-capt" title="captions (C)" aria-pressed="false">CC<kbd>C</kbd></button>
-<button id="nar-auto" title="auto-advance (A): go on to the next slide at the end of this one" aria-pressed="true">auto<kbd>A</kbd></button>
-<button id="nar-olb" title="outline (T)" aria-pressed="false">☰<kbd>T</kbd></button><button id="nar-helpb" title="keys and mouse (?)">?</button>
-<button id="nar-hide" title="hide / show the bar (X)"><span></span><kbd>X</kbd></button></div></div>
-<div id="nar-out"></div>
+<div class="row"><button id="nar-play" aria-label="play or pause">▶</button>${kbd('play')}<span id="nar-time"></span><span id="nar-num"></span>
+<span class="sp"></span><button id="nar-voice" title="voice: off, the talk runs on silently at the same pace" aria-pressed="true">voice${kbd('voice')}</button>
+<button id="nar-theme" title="next theme"><span></span>${kbd('theme')}</button>
+<button id="nar-capt" title="captions" aria-pressed="false">CC${kbd('captions')}</button>
+<button id="nar-auto" title="auto-advance: go on to the next slide at the end of this one" aria-pressed="true">auto${kbd('auto')}</button>
+<button id="nar-olb" title="outline" aria-label="outline" aria-pressed="false">☰${kbd('outline')}</button><button id="nar-helpb" title="keys and mouse" aria-label="keys and mouse">?</button>
+<button id="nar-hide" title="hide / show the bar" aria-label="hide or show the bar"><span></span>${kbd('hide')}</button></div></div>
+<div id="nar-out"></div><div id="nar-raw"></div>
 <div id="nar-help"><div class="box"><h3>Keys</h3><table>
-<tr><td><kbd>space</kbd></td><td>play / pause</td></tr><tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>previous / next slide</td></tr>
-<tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>previous / next sentence</td></tr><tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>first / last slide</td></tr>
-<tr><td><kbd>C</kbd></td><td>captions</td></tr><tr><td><kbd>T</kbd></td><td>outline</td></tr>
-<tr><td><kbd>M</kbd></td><td>voice on / off; the talk keeps its pace</td></tr>
-<tr><td><kbd>Y</kbd></td><td>next theme (colours and font)</td></tr>
-<tr><td><kbd>A</kbd></td><td>auto-advance to the next slide on / off</td></tr><tr><td><kbd>X</kbd></td><td>hide / show the bar</td></tr><tr><td><kbd>?</kbd></td><td>this help</td></tr>
-<tr><td><kbd>F</kbd> <kbd>Esc</kbd> <kbd>F1</kbd></td><td>reveal.js: fullscreen, overview, all its keys</td></tr></table>
+${HELP.filter(([a]) => a.split(' ').some(x => KEYS[x])).map(([a, d]) => `<tr><td>${a.split(' ').map(x => kbd(x)).join(' ')}</td><td>${d}</td></tr>`).join('')}
+</table><p>${KEYS.reveal ? `Every other key is reveal.js's own (F fullscreen, O overview, S speaker view, …). ${kbd('reveal')} and then a key gives
+that key to reveal.js even where this talk uses it: ${kbd('reveal')} <kbd>?</kbd> shows reveal.js's own list of keys, ${kbd('reveal')} <kbd>M</kbd> its menu.` : ''}</p>
+<p><button id="nar-rkeys">reveal.js keys</button> <button id="nar-rmenu">reveal.js menu</button></p>
 <h3>Mouse</h3><table><tr><td>timeline</td><td>click a slide to jump to it; inside the current slide, to the sentence under the pointer</td></tr>
 <tr><td>outline</td><td>click a line to play from there; click a section to open it</td></tr>
 <tr><td>Alt+click</td><td>an element on the slide: replay the sentence that introduced it</td></tr>
@@ -293,6 +360,12 @@ window.RevealNarrate = () => {
     // the frame of every slide, inside the slide's own box so that it scales and letterboxes with it
     deck.getSlidesElement().insertAdjacentHTML('beforeend', `<div id="nar-frame"><div id="nar-sec"></div>
 <div id="nar-ttl">${esc(document.title)}</div><div id="nar-no"></div><div id="nar-prog"><b></b></div></div>`);
+    // the slide number is reveal.js's own element, moved into the frame: its format (slide-number: c/t, c, h.v, ...) and
+    // its on/off state are reveal's, and the number key toggles it
+    deck.on('ready', () => { const sn = deck.getRevealElement().querySelector('.slide-number'); if (sn) $('#nar-no').append(sn); });
+    $('#nar-rkeys').onclick = () => deck.toggleHelp?.();
+    $('#nar-rmenu').onclick = () => menu()?.toggle?.();
+    $('#nar-rmenu').style.display = menu() ? '' : 'none';
     $('#nar-theme').onclick = () => { const n = Object.keys(T.themes || {}); setTheme(n[(n.indexOf(theme) + 1) % n.length]); };
     setTheme(T.themes?.[q.get('theme')] ? q.get('theme') : T.theme, !q.get('theme'));
     $('#nar-play').onclick = () => (started() ? toggle() : begin());
@@ -323,7 +396,7 @@ window.RevealNarrate = () => {
   // a theme is only values: set them on the page's root, and everything that names them follows
   function setTheme(name, keep) {  // keep: the page was built in this theme, nothing to set
     const th = (T.themes || {})[name];
-    $('#nar-theme').style.display = th ? '' : 'none';
+    $('#nar-theme').style.display = th && Object.keys(T.themes).length > 1 ? '' : 'none';  // one theme: locked (narrate: switch: false)
     if (!th) return;
     theme = name; $('#nar-theme span').textContent = name; body.dataset.theme = name;
     if (!keep) for (const [k, v] of Object.entries(th)) document.documentElement.style.setProperty('--' + k, v);
@@ -333,11 +406,10 @@ window.RevealNarrate = () => {
   // so the gap after a bullet shrinks with its number of lines. Title card: a title of more than two lines is set
   // smaller, and the byline sits at y = 0.33 of the frame or below the subtitle, whichever is lower.
   function fit(sec) {
-    const cs = getComputedStyle(deck.getRevealElement()), gap = parseFloat(cs.getPropertyValue('--bullet-gap'));
-    if (!gap) return;
-    const over = parseFloat(cs.getPropertyValue('--bullet-overlap')) || 0;
-    for (const li of sec.querySelectorAll('ul > li')) {
-      const c = getComputedStyle(li), lines = Math.max(1, Math.round(li.clientHeight / parseFloat(c.lineHeight)));
+    for (const li of sec.querySelectorAll('ul > li')) {  // --bullet-gap: 0 on a list or a block leaves its bullets alone
+      const c = getComputedStyle(li), gap = parseFloat(c.getPropertyValue('--bullet-gap')), over = parseFloat(c.getPropertyValue('--bullet-overlap')) || 0;
+      if (!gap) continue;
+      const lines = Math.max(1, Math.round(li.clientHeight / parseFloat(c.lineHeight)));
       li.style.marginBottom = gap - over * parseFloat(c.fontSize) * lines + 'px';
     }
     if (!sec.matches('.title-card')) return;
@@ -345,6 +417,7 @@ window.RevealNarrate = () => {
     if (t) t.classList.toggle('long', t.offsetHeight > 2.4 * parseFloat(getComputedStyle(t).lineHeight));
     if (by) { by.style.paddingTop = ''; by.style.paddingTop = Math.max(0, 716 * deck.getConfig().height / 1080 - by.offsetTop) + 'px'; }
   }
+  const menu = () => (deck.hasPlugin?.('menu') ? deck.getPlugin('menu') : null);  // Quarto's reveal.js-menu, if it is on
   function setOutline(v = !body.classList.contains('nar-outline')) {
     body.classList.toggle('nar-outline', v); $('#nar-olb').setAttribute('aria-pressed', v); syncOutline();
   }
@@ -354,26 +427,33 @@ window.RevealNarrate = () => {
   const started = () => $('#nar-start').style.display === 'none';
   function begin() { $('#nar-start').style.display = 'none'; go(h, k, true); }
 
+  // The talk's keys are handled here, before reveal.js sees them, and are not entered in reveal's own table: so the
+  // keys of reveal.js and of its plugins stay as they are underneath, and the prefix key (R) hands the next key to them.
+  // narrate: keys: in the front matter renames an action's key or, with false, frees it.
   function keys() {
-    const bind = (code, key, description, fn) => deck.addKeyBinding({keyCode: code, key, description}, () => { const idle = body.classList.contains('nar-idle'); wake(); fn(idle); });
-    bind(39, '→', 'next slide', () => go(h + 1, 0)); bind(34, 'PgDn', 'next slide', () => go(h + 1, 0));
-    bind(37, '←', 'previous slide', () => go(h - 1, 0)); bind(33, 'PgUp', 'previous slide', () => go(h - 1, 0));
-    bind(40, '↓', 'next sentence', nextS); bind(38, '↑', 'previous sentence', prevS);
-    bind(36, 'Home', 'first slide', () => go(0, 0)); bind(35, 'End', 'last slide', () => go(N - 1, 0));
-    bind(32, 'Space', 'play / pause', () => (started() ? toggle() : begin()));
-    bind(67, 'C', 'captions', () => $('#nar-capt').click());
-    bind(84, 'T', 'outline of the talk', () => setOutline());
-    // A takes over reveal's own auto-slide switch, which this talk has no use for; X is free in reveal and Quarto
-    bind(65, 'A', 'auto-advance to the next slide on / off', () => $('#nar-auto').click());
-    bind(77, 'M', 'voice on / off (the talk keeps its pace)', () => $('#nar-voice').click());
-    // X acts on what is on screen: it hides a bar that shows, and brings back one that is hidden or has faded
-    bind(89, 'Y', 'next theme', () => $('#nar-theme').click());
-    bind(88, 'X', 'hide / show the bar', idle => body.classList.toggle('nar-hidden', !idle && !body.classList.contains('nar-hidden')));
-    const help = () => body.classList.toggle('nar-help');
-    bind(191, '?', 'keys and mouse of the talk (F1: this list)', help); bind(63, '?', 'keys and mouse of the talk (Firefox)', help);
-    // no key acts with Ctrl, Alt or Meta held (copy, find, zoom, back stay the browser's), nor while a control has focus
-    deck.configure({keyboardCondition: e => !(e.ctrlKey || e.altKey || e.metaKey) &&
-      !document.activeElement?.matches('input, select, textarea, button, [contenteditable="true"]')});
+    const ACT = {
+      play: () => (started() ? toggle() : begin()), next: () => go(h + 1, 0), prev: () => go(h - 1, 0), down: nextS, up: prevS,
+      first: () => go(0, 0), last: () => go(N - 1, 0), captions: () => $('#nar-capt').click(), outline: () => setOutline(),
+      voice: () => $('#nar-voice').click(), auto: () => $('#nar-auto').click(), theme: () => $('#nar-theme').click(),
+      // hide acts on what is on screen: it hides a bar that shows, and brings back one that is hidden or has faded
+      hide: idle => body.classList.toggle('nar-hidden', !idle && !body.classList.contains('nar-hidden')),
+      help: () => body.classList.toggle('nar-help'),
+      number: () => { const c = deck.getConfig().slideNumber; if (c) numFmt = c; deck.configure({slideNumber: c ? false : numFmt}); },
+      reveal: () => { raw = 1; $('#nar-raw').textContent = 'reveal.js key …'; clearTimeout(rawT); rawT = setTimeout(unraw, 3000); },
+    };
+    const unraw = () => { raw = 0; $('#nar-raw').textContent = ''; };
+    addEventListener('keydown', e => {
+      // no key acts with Ctrl, Alt or Meta held (copy, find, zoom, back stay the browser's), nor in a text field
+      if (e.ctrlKey || e.altKey || e.metaKey || e.target.closest?.('input, select, textarea, [contenteditable="true"]')) return;
+      if (raw) return unraw();                                  // after the prefix: this key is reveal.js's
+      if (menu()?.isOpen?.() || deck.isOverview()) return;      // their own keys while they show
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      const act = Object.keys(ACT).find(x => KEYS[x] === key) || {PageDown: 'next', PageUp: 'prev'}[key];
+      if (!act || !KEYS[act]) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const idle = body.classList.contains('nar-idle');
+      wake(); ACT[act](idle);
+    }, true);
     // Alt+click replays the sentence that introduced the element; a plain click stays for selecting text
     deck.getRevealElement().addEventListener('click', e => {
       if (!e.altKey || e.ctrlKey) return;
@@ -401,6 +481,7 @@ window.RevealNarrate = () => {
     id: 'narrate',
     init(d) {
       deck = d; T = {lead: 0.7, gap: 0.4, tail: 1.0, pre: 0.2, say: [], ...window.TALK};
+      for (const [a, v] of Object.entries(T.keys || {})) if (a in KEYS) KEYS[a] = v === false || v === null ? null : String(v).length === 1 ? String(v).toLowerCase() : String(v);
       const hash = location.hash;  // #n.k is ours: hide it from reveal, which would read #3 as its own slide index
       history.replaceState(null, '', location.pathname + location.search);
       slides = deck.getSlides().filter(sl => !sl.querySelector('section')); N = slides.length;  // not the stacks a # heading makes
@@ -421,6 +502,7 @@ window.RevealNarrate = () => {
         return {say, T: t - T.gap + T.tail};
       });
       body.dataset.steps = T.scenes.reduce((a, sc) => a + sc.say.length, 0);
+      if (T.version && T.version !== VERSION) console.warn(`narrate: the player is ${VERSION}, the build script ${T.version}; update the talk's copies of the skill together`);
       if (n !== T.say.length || stale) body.dataset.error = `Narration out of date: the slides have ${n} spoken sentences, the audio ${T.say.length}` +
         `${stale ? `, and ${stale} differ in wording` : ''}. Run narrate.py again.`;
       D = T.scenes.map(s => s.T); S0 = D.map((_, j) => D.slice(0, j).reduce((a, b) => a + b, 0)); TOTAL = S0[N - 1] + D[N - 1];
@@ -438,6 +520,10 @@ window.RevealNarrate = () => {
       deck.configure({respondToHashChanges: false, hash: false, history: false, scrollActivationWidth: null, ...(SHOT ? {transition: 'none'} : {})});
       body.classList.toggle('nar-shot', SHOT || RECV); body.classList.toggle('nar-fast', FAST);
       chrome(); keys(); outline();
+      // settings in the address: ?voice=off, ?cc=on, ?auto=off (and ?theme=NAME)
+      if (q.get('voice') === 'off') $('#nar-voice').click();
+      if (q.get('cc') === 'on') $('#nar-capt').click();
+      if (q.get('auto') === 'off') $('#nar-auto').click();
       audio.ontimeupdate = () => { body.dataset.audio = `${h + 1}.${k + 1}@${audio.currentTime.toFixed(1)}`; };
       deck.on('ready', () => {
         deck.sync(); deck.layout();

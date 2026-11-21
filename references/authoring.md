@@ -99,23 +99,37 @@ Attributes of a `say` block:
 
 | attribute | effect |
 |---|---|
-| `point="#id"` | a ring closes in on that element when the sentence starts. Any element with an id: a `::: {#id}` div, a named part of a figure |
-| `grow="#id"` | that SVG line is drawn from start to end while the sentence is spoken (a trajectory, a curve) |
+| `point="#id"` | a pointer on that element while the sentence is spoken |
+| `point="#a@a phrase; #b@another phrase"` | several, one after another: each appears when the voice reaches its phrase and gives way to the next |
+| `grow="#id"` | that SVG line is drawn from start to end while the sentence is spoken (a trajectory, a curve); its markers appear as the line reaches them |
+| `with="#dots"` | with `grow=`: the markers of another artist appear as the line passes them (plot them in the line's order) |
 | `wait="2"` | length of a silent step in seconds |
 | `label="..."` | the outline's name for a silent step |
 
-An element that should be pointed at when it appears goes after the block that points
-at it:
+Any other block takes `at="2"`: it appears with sentence 2, wherever it stands in the
+source. Without it, a block appears with the sentence it follows, and a block written
+after a container that holds the narration would wait for the last sentence. A
+`::: {.note}` is there from the start unless it says otherwise.
+
+**Pointers.** A pointer on a point of a figure is a ring; on anything else it is a box
+around it. Use them rarely (see the skill's rules) and prefer the ring:
+
+```python
+mark("fit", ax, 200, slope * 200, r=0.04)   # in figures.py: a point to ring, id "<figure>-fit"
+```
 
 ```markdown
-::: {.say point="#msd-def"}
-We square the length of that arrow, and average it over all walkers.
-:::
-
-::: {#msd-def}
-$$\langle\Delta r^2\rangle(t)=\frac{1}{N}\sum_i\left|\Delta\mathbf{r}_i(t)\right|^2$$
+::: {.say point="#msd-fit"}
+A straight line fits it.
 :::
 ```
+
+`mark()` is the video engine's: an invisible dot of radius `r` (a fraction of the
+frame's height) at a data point. A phrase cue is timed by where the phrase stands in
+the sentence, which is right to about a third of a second.
+
+An element that should be pointed at when it appears goes after the block that points
+at it.
 
 ## Numbers: `values()`
 
@@ -157,6 +171,10 @@ a pinned block; the figure fills that box.
 - **Parts.** `gid="sN-name"`: the part appears with sentence N of its slide (counted
   from 1) and gets the id `<figure>-<name>`. `gid="name"` only names it. Use the id in
   `point=` and `grow=`; Alt+click on the part replays its sentence.
+- **Parts that leave or step back.** `gid="s2-4-name"` appears with sentence 2 and is
+  gone from sentence 4 on; `gid="s2-d4-name"` is dimmed from sentence 4 on. So one
+  figure can show a curve, replace it, or push it into the background, and need not be
+  drawn once per sentence. An arrow or a label for one sentence is such a part.
 - Sentence numbers count the slide's `say` blocks, silent steps included. The figure
   does not know which slide it is on: if the slide's sentences are reordered, renumber
   the gids.
@@ -221,6 +239,10 @@ What follows a switch, and what does not:
 - **Not**: the player's bar, which is always dark. The outline takes the theme.
 - **Not**: what the narration says. Never name a colour in a sentence or a bullet.
 
+A talk whose clips, images or narration fix the colours should not offer the switch:
+`narrate: {switch: false}` leaves only its own theme. `--themes` runs the check in
+every theme, which finds text that fits in one font and not in another.
+
 Changing `narrate: theme:` speaks nothing again; the build only renders.
 
 On a slide, three more things come from the frame: `::: {.note}` is the small print at
@@ -233,11 +255,18 @@ another colour.
 - **A clip** (a simulation movie) is a silent `.mp4` rendered by the project's own
   tools, put on the slide as raw HTML:
   `<video src="media/clips/run.mp4" data-external="1" style="width:60%"></video>`.
-  The player mutes it, loops it, and runs it on the slide's clock: it starts with the
-  slide and pauses with the talk. `data-external="1"` keeps it a file beside
-  `talk.html`; without it Quarto puts the whole clip inside the page.
+  `data-external="1"` keeps it a file beside `talk.html`; without it Quarto puts the
+  whole clip inside the page.
+- **Its clock.** A clip runs on the slide's clock: it starts with the slide, pauses with
+  the talk, and is set to the right time again at every sentence, so it does not drift
+  from the voice. With `data-clock="sentence"` it starts at 0 with the sentence that
+  reveals it.
+- **Looping.** A clip about as long as what it accompanies plays once and holds its last
+  frame; a shorter one loops. `data-once` and `data-loop` decide otherwise.
 - **An image** is ordinary Markdown or `<img>`. It can appear with a sentence and be
   pointed at as a whole, but not part by part.
+- With clips, keep `embed-resources: true` and mark the clips `data-external="1"`:
+  then the equations' KaTeX stays inside the page and only the clips are files.
 
 ## Front matter
 
@@ -251,6 +280,8 @@ narrate:
   gap: 0.4               # between sentences
   tail: 1.0              # after the last sentence, before the next slide
   embed: true            # speech inside talk.html; false: files in media/audio/
+  switch: true           # false: the viewer cannot change the theme (see Themes)
+  keys: {theme: false}   # the player's keys by action: a letter renames one, false frees it
   theme: light           # see Themes
   spoken:                # written: spoken; changes the speech, not the captions
     "Péclet": "Pay-clay"
@@ -262,8 +293,10 @@ format:
     height: 1080
     margin: 0                        # the frame has its own margins
     center: false
-    slide-number: false              # the player draws the frame: section, talk title,
-    progress: false                  #   "n / N" and the progress bar
+    slide-number: c/t                # reveal.js's own formats (c/t, c, h.v, h/v; false: none);
+    show-slide-number: all           #   the player puts the number into the frame
+    progress: false                  # the frame has its own progress bar
+    menu: true                       # reveal.js's menu, reached with R then M
     embed-resources: true            # keep: this is what makes the page work offline
     self-contained-math: true
     html-math-method: katex
@@ -292,13 +325,22 @@ With `embed: false`, ship `talk.html` together with `media/`.
 | A | auto-advance to the next slide on / off |
 | Y | next theme |
 | X | hide / show the bar |
-| ? | the list of keys and mouse actions |
+| # | slide number on / off |
+| ? | the talk's keys and mouse actions |
+| R, then a key | that key as reveal.js defines it: R ? shows reveal.js's own list of keys, R M its menu |
 
 Mouse: click a slide on the timeline to jump; click a line of the outline to play from
 there; Alt+click an element to replay the sentence that introduced it; Ctrl+click
-zooms; a plain click or drag selects text. Keys with Ctrl, Alt or Meta are left to the
-browser, and every other reveal.js key keeps its meaning (H J K L, F fullscreen, O
-overview, S speaker view, where the notes are the slide's narration).
+zooms; a plain click or drag selects text.
+
+The talk's keys are handled before reveal.js sees them and are not entered in its
+table. So every key the talk does not use is reveal.js's as always (H J K L, F
+fullscreen, O overview, S speaker view, where the notes are the slide's narration), and
+the prefix R hands the next key to reveal.js and its plugins even where the talk uses
+it. The help (`?`) has buttons for reveal.js's own list of keys and for its menu. Keys
+with Ctrl, Alt or Meta are left to the browser. `narrate: keys:` renames or frees a
+key by its action: `play`, `next`, `prev`, `up`, `down`, `first`, `last`, `captions`,
+`outline`, `voice`, `auto`, `theme`, `hide`, `number`, `help`, `reveal`.
 
 URL switches, for checks and links:
 
@@ -309,6 +351,7 @@ URL switches, for checks and links:
 | `talk.html?fast` | play through without sound at 50 times the speed (the build's check) |
 | `talk.html?autostart` | start without the click (works only where the browser allows sound unasked) |
 | `talk.html?theme=dark` | open in that theme; combines with the others (`?shot&theme=dark#5`) |
+| `talk.html?voice=off&cc=on&auto=off` | open with the voice off, captions on, auto-advance off |
 | `talk.html?tl=sections` | force a timeline layout: `slides`, `sections` or `none` |
 
 A browser plays no sound before the first click or key press, hence the start overlay.
@@ -343,6 +386,8 @@ asks for a new file. This path is described, not tested with another engine.
   than its column allows. Shorten, or shrink the figure's `figsize` height.
 - **Check: "loads from the network"**: something on the slides is linked from a URL
   (an image, a font, a script); download it into the talk's directory.
+- **A broken `:::` block**: a `{{< meta ... >}}` shortcode at the very end of the line
+  before a closing `:::` swallows the line break. Put a full stop or a space after it.
 - **No `chromium` on the PATH**: the check and `--shots` need Chromium or Chrome;
   `--no-check` builds without them.
 - **`quarto preview`** works for layout, with the narration of the last build.

@@ -13,7 +13,7 @@ typed-in colours, so that the figure follows a change of theme. Blue is data her
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import FancyArrowPatch
-from narrate import ART, FIG, PLOT, C, figure, values
+from narrate import ART, FIG, PLOT, C, figure, mark, values
 
 # ---------------------------------------------------------------- data, and the numbers that are spoken or shown
 STEPS, WALKERS, D0 = 400, 2000, 0.5  # steps, walkers, diffusion constant of the walk (variance 2 D0 per step)
@@ -52,6 +52,7 @@ ax.plot(0, 0, "o", color=C.ink, ms=11)
 ax.add_patch(FancyArrowPatch((0, 0), p[-1], arrowstyle="-|>", mutation_scale=20, shrinkA=0, shrinkB=0, color=C.accent,
                              lw=4, gid="s2-arrow"))
 ax.plot(*p[-1], "o", color=C.accent, ms=11, gid="s2-end")
+mark("dr", ax, *(p[-1] / 2), r=0.09)  # what sentence 2 points at: point="#walker-dr"
 ax.text(*(p[-1] / 2 + [1.5, 1.5]), "Δr(t)", color=C.accent, size=30, weight="semibold", gid="s2-label")
 ax.set(xlim=(c[0] - 1.13 * h, c[0] + 1.13 * h), ylim=(c[1] - h, c[1] + h), aspect="equal")
 ax.axis("off")
@@ -62,7 +63,8 @@ figure(fig, "walker")
 fig = plt.figure(figsize=FIG)
 ax = fig.add_axes(PLOT)
 ax.plot(t[::8], msd[::8], "o", color=C.blue, ms=7, gid="points")
-ax.plot(t, slope * t, color=C.accent, lw=3, gid="s2-fit")
+ax.plot(t, slope * t, color=C.accent, lw=3, gid="s2-line")
+mark("fit", ax, 200, slope * 200, r=0.04)  # point="#msd-fit" rings this point of the line
 ax.text(215, slope * 215 - 150, f"slope 4D, D = {D:.2f}", color=C.accent, size=22, gid="s2-fitlabel")
 ax.set_xlabel("time t (steps)")
 ax.set_ylabel("⟨Δr²⟩ (step lengths squared)")

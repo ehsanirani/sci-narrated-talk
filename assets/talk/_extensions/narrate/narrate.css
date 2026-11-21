@@ -105,11 +105,30 @@ body.nar-captions #nar-cap { display: block; }
 #nar-sec { left: 5%; }
 #nar-ttl { right: 9.5%; }
 #nar-no { right: 5%; font-weight: 600; }
+#nar-no .slide-number { position: static !important; margin: 0 !important; padding: 0 !important; background: none !important;
+  color: inherit !important; font: inherit !important; }
+#nar-no .slide-number a { color: inherit; pointer-events: none; }
 #nar-prog { left: 0; right: 0; bottom: 0 !important; height: 0.8%; background: var(--light, #d9dde3); }
 #nar-prog b { display: block; height: 100%; background: var(--accent, #e8663d); }
 
 /* pointer (a sentence's point="#id"): a ring that closes in on its target */
-.reveal .nar-ptr { position: absolute; z-index: 20; border: 3px solid var(--accent, #e8663d); border-radius: 8px;
-  background: color-mix(in srgb, var(--accent, #e8663d) 8%, transparent);
+.reveal .nar-ptr { --p: var(--pointer, var(--accent, #e8663d)); position: absolute; z-index: 20; border: 3px solid var(--p); border-radius: 8px;
+  background: color-mix(in srgb, var(--p) 8%, transparent);
   pointer-events: none; animation: nar-close .5s ease-out; }
 @keyframes nar-close { from { transform: scale(2.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.reveal .nar-ptr.ring { border-radius: 50%; }
+.reveal .nar-ptr.off { display: none; }
+@media (prefers-reduced-motion: reduce) { .reveal .nar-ptr { animation: none; } }
+
+/* figure parts with a lifetime (gid sA-B-name leaves at sentence B, sA-dB-name dims) */
+.reveal .nar-gone { opacity: 0 !important; visibility: hidden !important; }
+.reveal .nar-dim { opacity: 0.25 !important; }
+.reveal svg.nar-fig [data-until], .reveal svg.nar-fig [data-dim] { transition: opacity .3s; }
+
+/* reveal.js's own menu, when it is on: opened with R then M or from the help, so its button is not shown */
+.slide-menu-button { display: none !important; }
+#nar-raw { position: fixed; left: 50%; top: 12px; z-index: 75; transform: translateX(-50%); padding: 4px 12px; border-radius: 14px;
+  background: rgb(14 16 20 / 85%); color: #fff; font: 13px system-ui, sans-serif; pointer-events: none; }
+#nar-raw:empty { display: none; }
+#nar-help button { font: inherit; padding: 3px 10px; border: 1px solid #c7ccd4; border-radius: 4px; background: #f5f6f8; color: inherit; cursor: pointer; }
+#nar-bar button:focus-visible, #nar-help button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }

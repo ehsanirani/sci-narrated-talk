@@ -52,7 +52,10 @@ narration), `figures.py` (numbers and drawings), `_extensions/narrate/` (the pla
 `theme/narrated-talk.scss` (the look) and a `.gitignore`. Replace the content and keep
 the structure. `narrate.py`, `_extensions/` and `theme/` stay unedited, so that a fix in
 the skill can replace them; a talk's own style rules go in a further SCSS file at the
-end of the `theme:` list. Read `references/authoring.md` before writing the first slide.
+end of the `theme:` list. A talk works on its own copies: replace `narrate.py`,
+`_extensions/` and `theme/` together, never one of them, and not while the talk is
+being built. The page warns in the console when the player and the build script are
+of different versions. Read `references/authoring.md` before writing the first slide.
 
 ## Commands
 
@@ -66,8 +69,11 @@ command out: a shell variable holding it does not split in zsh.
 | `NT --script` | the narration per slide: words, flagged long sentences, audio file names, total minutes. Builds nothing |
 | `NT` | the whole build: `figures.py`, speech for new or changed sentences, `quarto render`, then the run-through check |
 | `NT --shots` | the build, then a screenshot of every slide's last stage and contact sheets in `build/shots/` |
+| `NT --shots=all --size=1920x1080` | also a screenshot of every sentence (`build/shots/all/`), at that size |
+| `NT --themes` | the build, with the check run in every theme the talk can be switched to |
 | `NT --no-check` | the build without the run-through (no Chromium needed) |
 | `NT --voices` | the voice names |
+| `NT --version` | the version of the skill these copies come from |
 
 Output: `talk.html`. Speech is cached per sentence in `media/audio/`, so a rebuild after
 a text change speaks only the changed sentences and takes seconds.
@@ -111,10 +117,17 @@ The rules of a talk nobody can interrupt, as in `sci-video-talk`:
 
 - **Define a quantity before plotting it.** The formula and a picture of what it
   measures come before the first plot that uses it.
-- **Point at what the sentence refers to** with `point="#id"` on its `say` block. A ring
-  closes in when the sentence starts.
-- **Build, do not show.** Something changes with every sentence: a curve, a bullet, a
-  term. A slide whose sentences reveal nothing reads as a frozen frame.
+- **Point rarely, and at data.** A pointer (`point=`) is for the few moments when the
+  viewer would not find what the voice means: one curve among several, one point on
+  it. A talk of fifteen minutes has ten to twenty, not one per sentence. Point at a
+  point of a figure (`mark()` in `figures.py`), never at a text block, a box, a clip
+  or a whole plot: what has just appeared needs no pointer.
+- **Nothing is on the slide before its moment.** A curve, a marker or a label that the
+  voice has not reached yet is not shown yet. Not every sentence has to bring
+  something new; a sentence may simply talk about what is there.
+- **When a video of the talk exists, reproduce it.** Same scenes, layouts, stages and
+  pointers, in the same places. Do not redesign, add boxes or move the figure to the
+  other side; improvements are proposed to the user, not slipped in.
 - **Terse.** The voice carries the explanation, so the slide carries only the claim,
   the figure and a few short bullets.
 - **Colours come from the theme.** `figures.py` draws with `C.blue`, `C.accent` and so
@@ -126,8 +139,8 @@ The rules of a talk nobody can interrupt, as in `sci-video-talk`:
   a figure beside staged bullets, bullets only, the takeaway, the note. They put every
   block where the video engine would, at its sizes. Pin blocks by hand only for a slide
   no layout fits.
-- **Every slide is numbered** by the player, "n / N" in the footer, so a question can
-  name a slide; the address bar shows `#slide.sentence` and such a link opens there.
+- **Every slide is numbered** in the footer (reveal.js's own slide number, in the
+  format the front matter sets), so a question can name a slide; the address bar shows `#slide.sentence` and such a link opens there.
 - **Stage with `say` blocks only.** Reveal.js fragments and `. . .` pauses of the
   author's own are not narrated and break the count.
 

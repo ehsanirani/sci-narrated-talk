@@ -18,11 +18,14 @@ format:
     height: 1080
     margin: 0
     center: false
-    # the player draws the frame (section, talk title, slide number, progress) inside the slide
-    slide-number: false
+    # The player draws the frame (section, talk title, progress) inside the slide. The slide number is reveal.js's:
+    # its format is set here (c/t, c, h.v, h/v; false for none) and the # key toggles it.
+    slide-number: c/t
+    show-slide-number: all
     progress: false
     controls: false
-    menu: false
+    # reveal.js's menu: opened with R then M, or from the help (?); its button is not shown
+    menu: true
     transition: fade
     transition-speed: fast
     html-math-method: katex
@@ -73,7 +76,7 @@ Follow a single walker. Its path is erratic, and it returns again and again.
 one walker, {{< meta v.shown >}} steps
 :::
 
-::: {.say point="#walker-arrow"}
+::: {.say point="#walker-dr"}
 After a time t it has moved by a displacement, the arrow.
 :::
 
