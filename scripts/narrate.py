@@ -46,7 +46,7 @@ import types
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.2.0"  # of the skill; the player (narrate.js) carries the same number
+VERSION = "0.3.0"  # of the skill; the player (narrate.js) carries the same number
 WPM = 155  # spoken words per minute, pauses included
 LONG = 45  # words; a longer sentence is flagged
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
@@ -395,11 +395,11 @@ class Browser:
         if not exe:
             sys.exit("no chromium or google-chrome on the PATH: the screenshots need one")
         fds = [fcntl.fcntl(f, fcntl.F_DUPFD, 10) for pair in (os.pipe(), os.pipe()) for f in pair]  # clear of 3 and 4
-        (r1, w1, r2, w2), self.n, self.buf = fds, 0, b""
+        (r1, w1, r2, w2), self.n, self.buf, self.dir = fds, 0, b"", tempfile.mkdtemp()
         self.w, self.r = w1, r2
         self.p = subprocess.Popen(
             [exe, "--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--host-resolver-rules=MAP * ~NOTFOUND",
-             "--remote-debugging-pipe", "--autoplay-policy=no-user-gesture-required", f"--user-data-dir={tempfile.mkdtemp()}",
+             "--remote-debugging-pipe", "--autoplay-policy=no-user-gesture-required", f"--user-data-dir={self.dir}",
              "about:blank"], preexec_fn=lambda: (os.dup2(r1, 3), os.dup2(w2, 4)), close_fds=False,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # the browser reads commands on 3 and answers on 4;
         # not pass_fds=(3, 4): that asks for 3 and 4 to be open here already, which a plain shell does not give
@@ -415,7 +415,10 @@ class Browser:
         os.write(self.w, json.dumps(msg).encode() + b"\0")
         while True:
             while b"\0" not in self.buf:
-                self.buf += os.read(self.r, 1 << 20)
+                got = os.read(self.r, 1 << 20)
+                if not got:
+                    sys.exit("the browser has gone")
+                self.buf += got
             raw, self.buf = self.buf.split(b"\0", 1)
             m = json.loads(raw)
             if m.get("id") == self.n:
@@ -433,6 +436,7 @@ class Browser:
     def close(self):
         self.p.terminate()
         self.p.wait()
+        shutil.rmtree(self.dir, ignore_errors=True)
 
 
 def shots(html, log, every=False, size="1280x720"):

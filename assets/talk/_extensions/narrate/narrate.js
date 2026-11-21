@@ -24,6 +24,8 @@
  * URL: #n.k = slide n, sentence k (1-based). ?fast: no audio, 50x speed; body[data-log] lists the visited positions,
  * body[data-over] what reaches outside its slide, body[data-done] the end. ?shot: no player, no transitions; #n alone
  * shows the slide's last sentence (for screenshots). ?tl=slides|sections|none forces a timeline mode.
+ * ?rec: no player and nothing moving by itself; window.narrate.timeline() and .seek(t) give the talk as a function of
+ * time, from which record.py makes a video.
  * Themes: window.TALK.themes maps a name to the values of the theme's CSS variables (--bg, --ink, ..., --font), which
  * are all the slides' styles and the figures refer to; ?theme=NAME opens in one, Y or the bar's button goes to the next.
  * In reveal's speaker view (S) the two previews follow the main window silently; the notes are the narration.
@@ -31,10 +33,12 @@
 window.RevealNarrate = () => {
   let deck, T, N, slides, h = 0, k = 0, playing = false, auto = true, phase = 'idle', tok = 0, timer = null;
   let D, S0, TOTAL, groups, secOf, SEC, items = [], built = -1, idleT, theme, cues = [], raw = 0, rawT;
-  const VERSION = '0.2.0', ARC = new WeakMap();
+  const VERSION = '0.3.0', ARC = new WeakMap();
   let numFmt = 'c/t';
   const opened = new Set();  // outline parts the viewer opened by hand (or that the browser's find opened)
-  const q = new URLSearchParams(location.search), FAST = q.has('fast'), SHOT = q.has('shot'), TL = q.get('tl');
+  const q = new URLSearchParams(location.search), FAST = q.has('fast'), REC = q.has('rec'), SHOT = q.has('shot') || REC, TL = q.get('tl');
+  let vt = 0;  // under ?rec the voice's time within the sentence is set from outside (window.narrate.seek), not played
+  const atime = () => (REC ? vt : audio.currentTime);
   const RECV = q.has('receiver');  // one of the two previews in reveal's speaker view (S): follows the main window, silent
   const audio = new Audio(), body = document.body, $ = s => document.querySelector(s);
   const f = () => (FAST ? 0.02 : 1);  // time scale of the pauses
@@ -132,7 +136,7 @@ window.RevealNarrate = () => {
   function cue() {  // which phrased pointers show now: the one whose phrase the voice has reached last
     if (!cues.length) return;
     const s = T.scenes[h].say[k];
-    const x = phase === 'say' && !FAST && s.src ? audio.currentTime / s.dur : phase === 'idle' && !SHOT && !FAST ? 0 : 1;
+    const x = phase === 'say' && !FAST && (s.src || REC) ? atime() / s.dur : phase === 'idle' && (REC || !SHOT) && !FAST ? 0 : 1;
     const on = Math.max(-1, ...cues.filter(c => c.from >= 0 && c.from <= x).map(c => c.from));
     for (const c of cues) c.el.classList.toggle('off', c.from >= 0 && c.from !== on);
   }
@@ -140,18 +144,22 @@ window.RevealNarrate = () => {
   // of the sentence that reveals it, starting at 0 with it). It is set to its time again at every sentence, because the
   // voice and the clock part by a little with each one. It loops unless it is about as long as what it accompanies
   // (data-once / data-loop decide otherwise); a clip that plays once holds its last frame.
+  function clipAt(v, j, now) {  // the clip v of slide j, at second now of that slide
+    const say = T.scenes[j].say, k0 = +(v.closest('[data-k]')?.dataset.k || 0), own = v.dataset.clock === 'sentence';
+    const base = own && k0 ? say[Math.min(k0, say.length - 1)].t0 - T.pre : 0, len = v.duration || 1e9;
+    const once = 'once' in v.dataset || (!('loop' in v.dataset) && len >= D[j] - base - 1.5);
+    return {once, len, k0: own ? k0 : 0, at: once ? Math.min(Math.max(0, now - base), len - 0.04) : Math.max(0, now - base) % len};
+  }
   function media(seek) {
+    if (REC) return;  // a recording takes the clips' frames from their files (record.clips)
     const say = T.scenes[h].say, speaking = phase === 'say' && !FAST && say[k].src;
     const now = SHOT ? say[k].t0 + say[k].dur : speaking ? say[k].t0 + audio.currentTime : k ? say[k].t0 - T.pre : 0;
     slides[h].querySelectorAll('video').forEach(v => {
       const go = () => {
-        const k0 = +(v.closest('[data-k]')?.dataset.k || 0), own = v.dataset.clock === 'sentence';
-        const base = own && k0 ? say[Math.min(k0, say.length - 1)].t0 - T.pre : 0, len = v.duration || 1e9;
-        const once = 'once' in v.dataset || (!('loop' in v.dataset) && len >= D[h] - base - 1.5);
-        const at = once ? Math.min(Math.max(0, now - base), len - 0.04) : Math.max(0, now - base) % len;
-        v.loop = !once;
-        if (seek && Math.abs(v.currentTime - at) > 0.06) v.currentTime = at;
-        playing && !(own && k < k0) && !(once && at >= len - 0.05) ? v.play().catch(() => {}) : v.pause();
+        const c = clipAt(v, h, now);
+        v.loop = !c.once;
+        if (seek && Math.abs(v.currentTime - c.at) > 0.06) v.currentTime = c.at;
+        playing && k >= c.k0 && !(c.once && c.at >= c.len - 0.05) ? v.play().catch(() => {}) : v.pause();
       };
       v.readyState ? go() : v.addEventListener('loadedmetadata', go, {once: true});
     });
@@ -230,21 +238,82 @@ window.RevealNarrate = () => {
     const c = $('#nar-segs i.cur b'), t = local();
     if (c) c.style.width = Math.min(100, t / D[h] * 100) + '%';
     $('#nar-time').textContent = `${fmt(S0[h] + t)} / ${fmt(TOTAL)}`;
-    cue();
+    cue(); grow();
+    requestAnimationFrame(tick);
+  }
+  function grow() {
     says(h).forEach((s, j) => {  // grow="#id": the line is drawn while the sentence is spoken, and the markers on it
       const g = s.dataset.grow && slides[h].querySelector(s.dataset.grow);  // (its own, and those of with="#id") appear as it passes
       const p = g && (g.matches('path') ? g : g.querySelector('path'));
       if (!p) return;
       const L = p.getTotalLength();
-      const x = SHOT || FAST || k > j ? 1 : k < j ? 0 : phase === 'say' ? Math.min(1, audio.currentTime / T.scenes[h].say[j].dur) : phase === 'after' ? 1 : 0;
+      const x = (SHOT && !REC) || FAST || k > j ? 1 : k < j ? 0 : phase === 'say' ? Math.min(1, atime() / T.scenes[h].say[j].dur) : phase === 'after' ? 1 : 0;
       p.style.strokeDasharray = L;
       p.style.strokeDashoffset = L * (1 - x);
       const marks = [...g.querySelectorAll('use'), ...(s.dataset.with ? slides[h].querySelectorAll(`${s.dataset.with} use`) : [])];
       if (marks.length && !ARC.has(marks[0]) && g.getBoundingClientRect().width) along(p, marks);
       for (const e of marks) e.style.visibility = x >= (ARC.get(e) ?? 0) ? '' : 'hidden';
     });
-    requestAnimationFrame(tick);
   }
+  // ?rec, for record.py: the talk as a function of time. timeline() lists every step with its start in the talk's
+  // running time. seek(t) puts the page at second t (slide, sentence, fades, pointers, growing lines) and returns
+  // sig, a signature of what is on screen, so that equal frames are photographed once, and clips. The browser never
+  // draws a clip's frame: clips lists every clip that shows, with the box its picture takes in the window and the
+  // time it is at, and record.py puts the frame of the clip's file there.
+  // The fades: every step is entered from the step before it with the page's own transitions and animations switched
+  // on for that instant (nar-fx). What they start (a fragment or a slide fading, a pointer closing in) is copied,
+  // keyframes and timing, into animations that do not run; each is then set to the time since its start. So a frame
+  // shows what the page shows that long after the step began, whatever was recorded before it.
+  const record = {
+    fx: [],
+    timeline: () => ({total: TOTAL, title: document.title, themes: Object.keys(T.themes || {}), steps: T.scenes.flatMap((sc, j) => sc.say.map((s, n) => (
+      {slide: j + 1, sentence: n + 1, slideStart: S0[j], start: S0[j] + s.t0, dur: s.dur, src: s.src || null,
+       text: words(says(j)[n].textContent), section: SEC[j], heading: titleOf(j)})))}),
+    seek(t) {
+      t = Math.max(0, Math.min(TOTAL - 0.001, t));
+      const nh = S0.findLastIndex(x => x <= t), loc = t - S0[nh], say = T.scenes[nh].say;
+      const nk = say.reduce((a, s, j) => (j && loc >= s.t0 - T.pre ? j : a), 0), s = say[nk], began = nk ? s.t0 - T.pre : 0;
+      if (nh !== h || nk !== k || !record.on) {
+        record.on = true; halt();
+        record.fx.forEach(a => a.cancel());
+        const [ph, pk] = nk ? [nh, nk - 1] : nh ? [nh - 1, says(nh - 1).length - 1] : [0, 0];  // the step before
+        place(ph, pk);
+        phase = 'after'; grow();  // as that step ended: its line drawn
+        fit(slides[nh]);
+        void body.offsetHeight;  // the styles the transitions start from
+        body.classList.add('nar-fx');
+        place(nh, nk);
+        cues.forEach(c => c.el.classList.remove('off'));  // a pointer that waits for its phrase closes in when it comes
+        record.fx = document.getAnimations().map(a => {
+          const e = a.effect, c = new Animation(new KeyframeEffect(e.target, e.getKeyframes(), {...e.getTiming(), pseudoElement: e.pseudoElement}));
+          const from = cues.find(q => q.el === e.target)?.from;
+          c.narAt = from > 0 ? s.t0 + from * s.dur : began;
+          c.pause();
+          return c;
+        });
+        body.classList.remove('nar-fx');
+      }
+      const live = record.fx.filter(a => { a.currentTime = (loc - a.narAt) * 1000; return a.currentTime >= 0 && a.currentTime < a.effect.getComputedTiming().endTime; });
+      vt = Math.max(0, Math.min(s.dur, loc - s.t0));
+      phase = loc < s.t0 ? 'idle' : loc <= s.t0 + s.dur ? 'say' : 'after';
+      cue(); grow();
+      const moving = says(h).some((e, j) => e.dataset.grow && j === k && phase === 'say');
+      return {clips: record.clips(loc), sig: [h, k, cues.map(c => +c.el.classList.contains('off')).join(''),
+        moving ? vt.toFixed(3) : phase === 'idle' ? 'i' : '', [...new Set(live.map(a => Math.round(a.currentTime)))].join(',')].join('|')};
+    },
+    // every clip that shows (also one of a slide that is fading out, held where that slide ended): its number among the
+    // page's clips, its file, the box of its picture in the window (object-fit, centred) and its time
+    clips: loc => [...document.querySelectorAll('.reveal .slides video')].flatMap((v, id) => {
+      const j = slides.indexOf(v.closest('section'));
+      if (j < 0 || !v.videoWidth || !v.checkVisibility({opacityProperty: true, visibilityProperty: true})) return [];
+      const r = v.getBoundingClientRect(), z = r.width / v.offsetWidth, W = v.clientWidth * z, H = v.clientHeight * z;
+      const a = W / v.videoWidth, b = H / v.videoHeight, fit = getComputedStyle(v).objectFit;
+      const [sx, sy] = fit === 'fill' ? [a, b] : Array(2).fill(fit === 'cover' ? Math.max(a, b) : fit === 'none' ? z : Math.min(a, b, fit === 'scale-down' ? z : 1e9));
+      const w = v.videoWidth * sx, hh = v.videoHeight * sy;
+      return [{id, src: v.currentSrc, x: r.x + v.clientLeft * z + (W - w) / 2, y: r.y + v.clientTop * z + (H - hh) / 2, w, h: hh,
+               t: clipAt(v, j, j === h ? loc : D[j]).at}];
+    }),
+  };
 
   // ------------------------------------------------------------ timeline
   function layout() {  // one segment per slide, or per section with the current one expanded, or none
@@ -520,8 +589,8 @@ that key to reveal.js even where this talk uses it: ${kbd('reveal')} <kbd>?</kbd
       });
       groups.forEach(g => { g.t = S0[g.js[0]]; g.T = g.js.reduce((a, j) => a + D[j], 0); });
       // reveal turns a window below 435 px into a scrolling page, which the narration cannot follow: keep the deck
-      deck.configure({respondToHashChanges: false, hash: false, history: false, scrollActivationWidth: null, ...(SHOT ? {transition: 'none'} : {})});
-      body.classList.toggle('nar-shot', SHOT || RECV); body.classList.toggle('nar-fast', FAST);
+      deck.configure({respondToHashChanges: false, hash: false, history: false, scrollActivationWidth: null, ...(SHOT && !REC ? {transition: 'none'} : {})});
+      body.classList.toggle('nar-shot', SHOT || RECV); body.classList.toggle('nar-fast', FAST); body.classList.toggle('nar-rec', REC);
       chrome(); keys(); outline();
       // settings in the address: ?voice=off, ?cc=on, ?auto=off (and ?theme=NAME)
       if (q.get('voice') === 'off') $('#nar-voice').click();
@@ -540,7 +609,7 @@ that key to reveal.js even where this talk uses it: ${kbd('reveal')} <kbd>?</kbd
         k = SHOT && !b ? 99 : (b || 1) - 1;
         if (FAST) { $('#nar-start').style.display = 'none'; go(h, k, true); } else go(h, k, false);
         if (q.has('autostart')) begin();
-        tick();
+        if (REC) window.narrate = record; else tick();
       });
     },
   };

@@ -1,6 +1,6 @@
 ---
 name: sci-narrated-talk
-description: Make a scientific talk that tells itself, as one HTML page. A synthetic voice narrates a Quarto + reveal.js deck sentence by sentence while the slide builds, and the viewer can pause, step by sentence or slide, jump through a timeline or an outline, replay the sentence behind any element, zoom, read captions, or switch the voice off. Slides stay real slides (selectable text, KaTeX equations, inline SVG figures whose parts appear and are pointed at as they are mentioned, embedded clips), everything is built locally from one talk.qmd, and the result opens offline. Use whenever the user asks for a narrated talk, a narrated or self-playing presentation, slides with a voice-over, an interactive or clickable version of a video talk, a talk people can watch on their own, or wants such a talk revised (narration, voice, a slide, the figures), even if they only say "make the talk play by itself". Not for an .mp4 (sci-video-talk), a deck the user presents live without narration (sci-talk) or a written report (sci-report).
+description: Make a scientific talk that tells itself, as one HTML page. A synthetic voice narrates a Quarto + reveal.js deck sentence by sentence while the slide builds, and the viewer can pause, step by sentence or slide, jump through a timeline or an outline, replay the sentence behind any element, zoom, read captions, or switch the voice off. Slides stay real slides (selectable text, KaTeX equations, inline SVG figures whose parts appear and are pointed at as they are mentioned, embedded clips), everything is built locally from one talk.qmd, and the result opens offline. Use whenever the user asks for a narrated talk, a narrated or self-playing presentation, slides with a voice-over, an interactive or clickable version of a video talk, a talk people can watch on their own, or wants such a talk revised (narration, voice, a slide, the figures), even if they only say "make the talk play by itself". The finished talk can also be recorded to an .mp4. Not for a video made without the interactive page (sci-video-talk), a deck the user presents live without narration (sci-talk) or a written report (sci-report).
 ---
 
 # sci-narrated-talk
@@ -77,6 +77,27 @@ command out: a shell variable holding it does not split in zsh.
 
 Output: `talk.html`. Speech is cached per sentence in `media/audio/`, so a rebuild after
 a text change speaks only the changed sentences and takes seconds.
+
+## Recording a video
+
+`scripts/record.py` turns a built `talk.html` into an `.mp4`, so the talk is the single
+source of both forms. It needs ffmpeg as well as Chromium, and `narrate.py` beside it:
+
+```sh
+nix shell nixpkgs#ffmpeg -c uv run --no-project --with soundfile --with numpy --with pillow \
+    python record.py talk.html
+```
+
+It writes `talk.mp4` beside the page (h264 and aac, the captions as a subtitle track,
+one chapter per slide) and `talk.srt`. `--from=S --to=S` records a stretch for a trial,
+`--theme=NAME` another theme, `--size=1280x720`, `--fps=25`, `--crf=20`, `-o FILE`.
+A 15-minute talk with 27 clips took 5.5 minutes on a 12-thread laptop.
+
+The video is the page at every instant, not a screen capture: the same fades, pointers
+and growing lines, the clips' frames taken from their files. What it loses against the
+page: everything the viewer does (stepping, the outline, replaying a sentence, zoom,
+selecting text), the theme switch (one theme per recording) and the viewer's own pace.
+Look at a few frames and listen to a stretch before handing it over.
 
 ## Workflow
 
@@ -167,9 +188,8 @@ project's own rules for where status and dated records go.
 
 ## Not built
 
-Say so when asked, rather than improvising: an `.mp4` from the talk (use
-`sci-video-talk` for a video); speech engines other than Kokoro, except by dropping
-files into `media/audio/`; a two-voice dialogue; background music.
+Say so when asked, rather than improvising: speech engines other than Kokoro, except by
+dropping files into `media/audio/`; a two-voice dialogue; background music.
 
 ## References
 

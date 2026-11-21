@@ -89,7 +89,11 @@ body.nar-help #nar-help { display: flex; }
 #nar-start small { display: block; margin-top: 14px; max-width: 34em; font-size: 16px; color: #ffb4a0; }
 body.nar-shot #nar-bar, body.nar-shot #nar-out, body.nar-shot #nar-help, body.nar-shot #nar-start,
 body.nar-fast #nar-start { display: none !important; }
-body.nar-shot .reveal *, body.nar-shot .reveal *::before { transition: none !important; animation: none !important; }
+body.nar-shot:not(.nar-fx) .reveal *, body.nar-shot:not(.nar-fx) .reveal *::before { transition: none !important; animation: none !important; }
+/* a recording (record.py) photographs the page with its clips black, and once more with clips white: the difference is
+   how much of a clip shows at each point, and the clip's own frame is put there from its file */
+body.nar-rec video { filter: brightness(0) !important; }
+body.nar-rec video[data-white] { filter: brightness(0) invert(1) !important; }
 
 /* captions and the section label sit in the deck's frame and scale with it; captions rise above the bar while it shows */
 #nar-cap { position: absolute; left: 10%; right: 10%; bottom: 9%; z-index: 30; text-align: center; display: none;

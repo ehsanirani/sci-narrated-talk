@@ -24,7 +24,8 @@ a sequence of events; this skill ships the sequence itself.
 | plays in | any video player | a browser |
 
 Use the video when the talk must play in a video player or on a platform that takes
-only video. Use the narrated talk otherwise.
+only video. Use the narrated talk otherwise. A narrated talk can also be recorded to
+an `.mp4` afterwards (Recording a video, below).
 
 ## Quick start
 
@@ -42,6 +43,28 @@ The copies need `-L` because the installed skill is a tree of read-only links in
 Nix store. The first build downloads the voice model (340 MB) to `~/.cache/kokoro/`.
 The starter is a four-slide talk about a random walk, the twin of the video skill's
 starter: 1.3 minutes, 6.8 MB as one file.
+
+## Recording a video
+
+```sh
+nix shell nixpkgs#ffmpeg -c uv run --no-project --with soundfile --with numpy --with pillow \
+    python $skill/scripts/record.py talk.html
+```
+
+writes `talk.mp4` beside the page (h264 and aac, the captions as a subtitle track, one
+chapter per slide) and `talk.srt`. Options: `--from=S --to=S` (a stretch, for a trial),
+`--theme=NAME`, `--size=1280x720`, `--fps=25`, `--crf=20`, `-o FILE`. `record.py` needs
+`narrate.py` beside it, ffmpeg and Chromium, and a page whose player is 0.3.0 or later.
+
+How long it takes: a 15-minute talk with 27 clips, 22,378 frames at 1920x1080, took
+5.5 minutes on a 12-thread laptop, with 968 frames photographed. Most of the time is
+x264 encoding the moving clips; a talk without clips records faster.
+
+What the video loses against the page: everything the viewer does (stepping by
+sentence, the outline, replaying the sentence behind an element, zoom, selecting text),
+the theme switch (a recording is in one theme) and the viewer's own pace. The page
+plays a sentence for as long as its file lasts and the video for the length the build
+measured; the two differ by less than a frame per sentence.
 
 ## How a talk is written
 
@@ -168,6 +191,7 @@ sci-narrated-talk/
 ├── docs/                         # the two pictures of this file
 ├── references/authoring.md       # say blocks, figures, numbers, clips, settings, player, failures
 ├── scripts/narrate.py            # the build: figures, speech, manifest, render, check, screenshots
+├── scripts/record.py             # a built talk.html to an .mp4
 └── assets/talk/                  # the starter talk
     ├── talk.qmd                  # slides and narration
     ├── figures.py                # numbers and drawings
@@ -205,6 +229,18 @@ sci-narrated-talk/
    was reached in order, every equation is rendered, nothing reaches outside its slide,
    nothing stays hidden, and nothing is loaded from a URL.
 
+8. **Recording** (`record.py`). Opened with `?rec`, the page plays nothing by itself:
+   `narrate.seek(t)` puts it at second t of the talk (slide, sentence, fades, pointers,
+   growing lines) and returns a signature of what it shows and the clips that show,
+   each with the box of its picture and the time it is at. `record.py` asks for every
+   frame's instant and photographs the page only when the signature changes. The
+   browser never draws a clip's frame. Where a clip shows, the page is photographed
+   twice, with its clips black and with them white; the difference is how much of the
+   clip shows at each point (all of it, less in a fade, none under a pointer's line).
+   The frame of the clip for that instant is decoded from its file by ffmpeg and added
+   in that proportion. The frames go to ffmpeg as they are made, with the sound built
+   from the sentence files at their starts on the talk's clock.
+
 ## Requirements
 
 - `uv` (the Python packages are fetched per run: `kokoro-onnx`, `soundfile`, `pyyaml`,
@@ -213,7 +249,8 @@ sci-narrated-talk/
 - Chromium or Chrome on the PATH, for the check and the screenshots only
 - the theme's font installed on the build machine (Source Sans 3; IBM Plex Serif for
   `journal`); without it the talk falls back to the viewer's system font
-- no ffmpeg, no node, no network after the first download of the voice model
+- no node, no network after the first download of the voice model; ffmpeg only for
+  `record.py`
 
 ## Tested
 
@@ -245,9 +282,13 @@ developed on a 22-slide, 15-minute research talk before it was generalised here.
 - **A recorded voice or another speech engine.** The file-by-file replacement is
   described in `references/authoring.md` and follows from how files are named; it has
   not been run with another engine.
-- **Video export.** Recording the page to an `.mp4` is the planned next step, so that
-  the talk becomes the single source of both forms. Until then, a video is made with
-  `sci-video-talk`.
+- **Recording, beyond two talks.** `record.py` was run on the starter and on one
+  15-minute talk with 27 clips (Chromium 149, ffmpeg 8 from nixpkgs): frames compared
+  with the clips' own frames and with the browser's picture, the sound with the
+  sentence files. Not tried: a clip that loops (the decoder starts again at a frame,
+  the path `--from` uses, which was checked), a clip that is not 25 frames per second,
+  a clip under a CSS filter or blend mode (it will come out wrong), a slide transition
+  other than the fade. Nobody has watched a recording from start to end.
 - **Themes on clips and pasted images.** They keep their own colours.
 - **Every slide in every theme.** Two slides per theme were looked at.
 - **Vertical slide stacks beyond section dividers**, a two-voice dialogue, music.

@@ -263,6 +263,11 @@ another colour.
   reveals it.
 - **Looping.** A clip about as long as what it accompanies plays once and holds its last
   frame; a shorter one loops. `data-once` and `data-loop` decide otherwise.
+- **In a recording** (`record.py`) a clip's frames are read from its file by ffmpeg,
+  not from the browser. So a clip has to be a file beside the page that ffmpeg can
+  read (`data-external="1"`, not embedded), and what is drawn over it has to be drawn
+  plainly over it: a pointer, a label, an SVG layer, a fade are kept; a CSS filter or
+  blend mode on a clip or around it is not.
 - **An image** is ordinary Markdown or `<img>`. It can appear with a sentence and be
   pointed at as a whole, but not part by part.
 - With clips, keep `embed-resources: true` and mark the clips `data-external="1"`:
