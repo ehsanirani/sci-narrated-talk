@@ -2,26 +2,41 @@
 
     uv run --no-project --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib python narrate.py [talk.qmd]
 
-The steps, in order:
-  1. figures.py, if there is one: the drawings (build/fig/*.html) and the numbers (build/values.yml);
-  2. the speech of every `::: say` sentence (Kokoro, one mp3 per sentence, cached in media/audio/);
-  3. media/manifest.js: the sentence files and their lengths, which are the talk's clock;
-  4. quarto render;
-  5. a run-through in headless Chromium, offline: every sentence reached in order, the equations rendered, nothing
-     outside its slide, nothing loaded from the network.
+The slides and the voice are separate layers. talk.html holds the slides, the narration's text and the player, and
+no voice; a voice is a folder beside it, media/voices/<name>/ (its audio and a voice.js), which the page finds when it
+opens. A voice can be added, replaced or deleted without rendering the slides again.
 
-  --script       print the narration with words, seconds and audio file per sentence; build nothing
-  --shots        after the build: a screenshot of every slide's last stage in build/shots/ (contact sheets with pillow)
-  --shots=all    ... and of every sentence of every slide (build/shots/all/NN-K.png)
-  --size=WxH     the size of the screenshots (default 1280x720)
-  --themes       run the check in every theme the talk can be switched to, not only the one it opens in
-  --no-check     skip step 5
-  --voices       list the voices
-  --version      the version of the skill these files come from
+The steps of a build, in order:
+  1. figures.py, if there is one: the drawings (build/fig/*.html) and the numbers (build/values.yml);
+  2. media/manifest.js, rendered into the page: pauses, themes, keys and the voice the talk opens with;
+  3. the talk's own synthetic voice (narrate: voice:, Kokoro), one mp3 per sentence in media/voices/<voice>/; only
+     sentences it lacks are spoken. media/voices/index.js lists the voice folders;
+  4. quarto render;
+  5. a run-through in headless Chromium, offline and without a voice: every sentence reached in order, the equations
+     rendered, nothing outside its slide, nothing loaded from the network; and per voice, the steps it lacks.
+
+  --script             print the narration: words per sentence and the name of its file for a recording (03.2 is
+                       slide 3, step 2, as in the address talk.html#3.2); build nothing
+  --no-voice           build the slides without speaking anything
+  --voice=NAME         add or complete a synthetic voice (a Kokoro voice) without rendering the slides; with
+                       --speed=X and --lang=L; its folder is NAME, NAME-1.2 at speed 1.2, NAME-1.2-en-gb ...
+  --import-voice=NAME  bind the recordings in media/voices/NAME/ (03.2.wav, .mp3, .ogg or .flac, named as --script
+                       lists them) to their sentences: your own reading of the script, or another engine's
+  --bundle=NAME        write talk-NAME.html: the page with the voice NAME inside, one file that plays offline
+  --shots              after the build: a screenshot of every slide's last stage in build/shots/ (contact sheets with pillow)
+  --shots=all          ... and of every sentence of every slide (build/shots/all/NN-K.png)
+  --size=WxH           the size of the screenshots (default 1280x720)
+  --themes             run the check in every theme the talk can be switched to, not only the one it opens in
+  --no-check           skip step 5
+  --voices             list the Kokoro voices
+  --version            the version of the skill these files come from
+--voice, --import-voice and --bundle leave talk.html as it is: build the slides first.
 
 Settings, in the deck's front matter (all optional):
     narrate: {voice: af_heart, speed: 1.0, lang: en-us, lead: 0.7, gap: 0.4, tail: 1.0, spoken: {"Péclet": "Pay-clay"},
-              embed: true, theme: light, switch: true, keys: {theme: false}}
+              theme: light, switch: true, keys: {theme: false}}
+voice: the Kokoro voice the build speaks and the talk opens with; false: none, a deck to present by hand (each step
+then lasts its words at WPM). The viewer picks among the voices beside the page in the settings, or ?narrator=NAME.
 theme: one of THEMES below, or colours of your own on a base, {base: light, accent: "#0b7285"}. It is the theme the
 talk opens in; all of THEMES travel in the page and the viewer can switch between them (key Y, or ?theme=dark in the
 address). Figures drawn with `C` follow, because figure() writes the theme's colours into the SVG by name.
@@ -29,10 +44,7 @@ switch: false locks the talk to its theme (for a talk whose clips, images or nar
 keys: the player's keys by action (play, next, prev, up, down, first, last, captions, outline, voice, auto, theme, hide,
 help, number, settings, reveal); a key or a list of keys ([n, PageDown]; "space" for the space bar) replaces an action's
 keys, false frees them.
-embed: the speech goes into talk.html (one file to send); false leaves it in media/audio/ beside the page (opened
-without them, the page runs silently on the sentences' measured lengths).
-An mp3 that already exists in media/audio/ under a sentence's name is used as it is, so a recorded voice or another
-speech engine can replace Kokoro file by file (`--script` prints the names).
+embed: true (from 0.4.0, when the voice was inside talk.html) also writes the one-file copy, as --bundle does.
 """
 
 import base64
@@ -48,13 +60,16 @@ import types
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.4.0"  # of the skill; the player (narrate.js) carries the same number
+VERSION = "0.5.0"  # of the skill; the player (narrate.js) carries the same number
 WPM = 155  # spoken words per minute, pauses included
 LONG = 45  # words; a longer sentence is flagged
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 LANG = {"a": "en-us", "b": "en-gb", "e": "es", "f": "fr-fr", "h": "hi", "i": "it", "j": "ja", "p": "pt-br", "z": "cmn"}
 SAY = re.compile(r"^:::+ *(?:\{[^}\n]*\.say\b[^}\n]*\}|say) *\n(.*?)^:::+ *$", re.M | re.S)
 BUILD, MEDIA = Path("build"), Path("media")
+VOICES = MEDIA / "voices"  # a folder per voice, each with its audio and voice.js; index.js names them
+RECORDING = re.compile(r"\d+\.\d+(-[0-9a-f]{6})?")  # a recording's name: its place (03.2), and once bound its hash
+AUDIO = {".wav": "audio/wav", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".flac": "audio/flac"}  # both browsers play these
 THEMES = {  # bg, ink (text), muted (small print), light (rules), accent (title rule, bullets, pointers), three series
     "light": dict(bg="#ffffff", ink="#1d2433", muted="#6b7280", light="#d9dde3", accent="#e8663d", blue="#2b74d6",
                   green="#12a37a", purple="#7b5ea7"),
@@ -257,13 +272,14 @@ def plain(md):
 
 
 def slides(meta, body):
-    """[(title, [spoken sentence, ...])]: the title slide's data-say, then every `::: say` block under its heading."""
+    """[(title, [step, ...])] as the page has them: the title slide (data-say) or what stands before the first heading,
+    if any, then a slide per heading. A step is its spoken sentence, '' for a silent step (a block without text)."""
     first = (meta.get("title-slide-attributes") or {}).get("data-say", "")
-    out = [(meta.get("title", "(before the first heading)"), [plain(s) for s in first.split("|") if s.strip()])]
+    out = [(meta.get("title", "(before the first heading)"), [plain(s) for s in first.split("|")] if first else [])]
     for part in re.split(r"^(?=#{1,2} )", body, flags=re.M):
         head = re.match(r"#{1,2} +(.*)", part)
         title = re.sub(r"\[[^\]]*\]\{\.eyebrow\}|\{[^}]*\}", "", head.group(1)).strip() if head else None
-        says = [plain(s) for s in SAY.findall(part) if plain(s)]  # a block without text is a silent step
+        says = [plain(s) for s in SAY.findall(part)]
         if head:
             out.append((title, says))
         else:
@@ -272,7 +288,16 @@ def slides(meta, body):
         for s in says:
             if "$" in s or "\\" in s:
                 sys.exit(f"narration with math or a backslash on slide {title!r}: write the words instead\n  {s}")
-    return out
+    return out if out[0][1] or "title" in meta else out[1:]  # no title slide in the page, and nothing before the first heading
+
+
+def spoken(deck):
+    """[(position, sentence)] for every spoken sentence; position (3, 2) is slide 3, step 2, as the address #3.2."""
+    return [((n, k), s) for n, (_, says) in enumerate(deck, 1) for k, s in enumerate(says, 1) if s]
+
+
+def pos(p):
+    return f"{p[0]:02d}.{p[1]}"
 
 
 # ---------------------------------------------------------------- speech
@@ -295,51 +320,210 @@ def kokoro():
 
 
 def settings(meta):
-    c = dict(voice="af_heart", speed=1.0, lead=0.7, gap=0.4, tail=1.0, spoken={}, embed=True, theme="light", switch=True,
+    c = dict(voice="af_heart", speed=1.0, lead=0.7, gap=0.4, tail=1.0, spoken={}, theme="light", switch=True,
              keys={}) | (meta.get("narrate") or {})
-    c.setdefault("lang", LANG.get(c["voice"][0], "en-us"))
+    if c["voice"] in (None, "none"):  # (`voice: none` in YAML is the word, not null)
+        c["voice"] = False
+    c["speed"] = float(c["speed"])  # `speed: 1` and --speed=1 must name the same files (0.4.0's starter wrote 1.0)
+    if c["voice"]:
+        c.setdefault("lang", LANG.get(c["voice"][0], "en-us"))
     return c
 
 
+def folder(c):
+    """A synthetic voice's folder: the voice, then its speed and language where they are not the voice's own, so that
+    af_heart at two speeds is two voices."""
+    sp, own = float(c["speed"]), LANG.get(c["voice"][0], "en-us")
+    return c["voice"] + (f"-{sp:g}" if sp != 1 else "") + (f"-{c['lang']}" if c["lang"] != own else "")
+
+
 def mp3(sentence, c):
-    """Where the sentence's audio lives: named by voice, speed, language and the text as spoken."""
+    """(file name, sentence as spoken): the name is a hash of voice, speed, language and the text as spoken, so that
+    an unchanged sentence is never spoken twice. 0.4.0 used the same names, in media/audio/."""
     for a, b in c["spoken"].items():
         sentence = sentence.replace(a, b)
     key = hashlib.sha1(f"{c['voice']}|{c['speed']}|{c['lang']}|{sentence}".encode()).hexdigest()[:16]
-    return MEDIA / "audio" / f"{key}.mp3", sentence
+    return f"{key}.mp3", sentence
 
 
 def letters(sentence):
-    """A sentence's letters and digits: by these the page notices narration that changed after the build."""
+    """A sentence's letters and digits: its key, by which the page finds a step's audio in a voice (the player's norm)."""
     return re.sub(r"[\W_]", "", sentence).lower()
 
 
-def manifest(say, c, name, path=None):
-    """Write the page's manifest: say is [{src, dur, t}] in the order of the slides' spoken sentences (t = letters()).
-    For a talk whose speech exists already (a conversion of a video), build `say` yourself and call this."""
+def manifest(c, name, path=None):
+    """media/manifest.js, which the deck includes and Quarto renders into the page: what the talk is without a voice
+    (pauses, themes, keys) and the voice it opens with (a folder name; null for none)."""
     path = path or MEDIA / "manifest.js"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("window.TALK = " + json.dumps(dict(
         version=VERSION, lead=c["lead"], gap=c["gap"], tail=c["tail"], pre=0.2, theme=name, themes=PALETTES,
-        keys=c.get("keys") or {}, say=say)) + ";\n")
+        keys=c.get("keys") or {}, voice=opens_with(c) or None)) + ";\n")
 
 
-def speech(sentences, c, embed):
-    """Synthesise what is missing; return the manifest's entries (src, dur) in order."""
+def opens_with(c):
+    """The folder of the voice the talk opens with: your own reading by its name, a synthetic voice by voice, speed and
+    language."""
+    return c["voice"] and (c["voice"] if kind(VOICES / c["voice"]) == "recorded" else folder(c))
+
+
+# ---------------------------------------------------------------- voices
+def write_voice(d, v):
+    """d/voice.js. v: label, kind (synthetic | recorded), steps [{file, at, dur, t}] and anything else about the voice.
+    One step per line, so that a recorded voice reads well in a diff. For speech made elsewhere (a video's), write the
+    files into a folder of media/voices/ and call this."""
+    head = json.dumps({"name": d.name, **{k: x for k, x in v.items() if k != "steps"}, "version": VERSION})
+    steps = ",\n  ".join(json.dumps(s, ensure_ascii=False) for s in v["steps"])
+    tmp = d / "voice.js.part"  # written whole, then renamed: an interrupted build never leaves half a voice.js
+    tmp.write_text(f'window.VOICE = {head[:-1]}, "steps": [\n  {steps}\n]}};\n')
+    tmp.replace(d / "voice.js")
+
+
+def read_voice(d, strict=True):
+    """d/voice.js as a dict. One that cannot be read stops the build (strict) or is reported and skipped (None)."""
+    try:
+        t = (d / "voice.js").read_text()
+        return json.loads(t[t.index("{"):t.rindex("}") + 1])
+    except ValueError as e:
+        why = (f"{d / 'voice.js'} cannot be read ({e}). A synthetic voice: delete it and build the voice again (its "
+               "audio is kept). Your own reading: the files carry their place in their names (03.2-1a2b3c.wav); rename "
+               "them back to 03.2.wav, delete voice.js and --import-voice again, before the slides change")
+        if strict:
+            sys.exit(why)
+        print("  " + why)
+
+
+def voices():
+    return sorted(p.parent.name for p in VOICES.glob("*/voice.js"))
+
+
+def index():
+    """media/voices/index.js: the voice folders, which the page cannot list for itself. Returns their names."""
+    VOICES.mkdir(parents=True, exist_ok=True)
+    (VOICES / "index.js").write_text("window.VOICES = " + json.dumps(voices()) + ";\n")
+    return voices()
+
+
+def kind(d):
+    return (d / "voice.js").exists() and read_voice(d).get("kind")
+
+
+def lacks(name, sentences):
+    """The sentences the voice has no audio for (None: its voice.js cannot be read, which is reported)."""
+    v = read_voice(VOICES / name, strict=False)
+    return v and [s for s in sentences if letters(s) not in {x["t"] for x in v["steps"]}]
+
+
+def speech(sentences, c):
+    """The synthetic voice c (Kokoro voice, speed, lang) in media/voices/<folder>/: the sentences it lacks are spoken,
+    the rest kept, and what a 0.4.0 build spoke into media/audio/ is moved in. Writes its voice.js; returns
+    (folder, seconds of speech)."""
     import soundfile
 
-    (MEDIA / "audio").mkdir(parents=True, exist_ok=True)
-    model, out = None, []
+    d = VOICES / folder(c)
+    if kind(d) not in (False, "synthetic") or (d.is_dir() and any(RECORDING.fullmatch(p.stem) for p in d.iterdir())):
+        sys.exit(f"{d} holds your own recordings, not a synthetic voice: --import-voice={d.name} binds them")
+
+    def folder_made():  # only once a file goes in, so that a mistyped voice leaves no folder behind
+        d.mkdir(parents=True, exist_ok=True)
+        (d / ".gitignore").write_text("*\n")  # the build can make it again, so git leaves it out (a recorded voice it keeps)
+
+    model, out, moved = None, [], 0
     for s in sentences:
-        p, spoken = mp3(s, c)
+        name, said = mp3(s, c)
+        p, old = d / name, MEDIA / "audio" / name
+        if not p.exists() and old.exists():
+            folder_made()
+            old.rename(p)
+            moved += 1
         if not p.exists():
-            model = model or kokoro()
-            a, sr = model.create(spoken, voice=c["voice"], speed=c["speed"], lang=c["lang"])
+            if model is None:
+                model = kokoro()
+                if c["voice"] not in model.get_voices():
+                    sys.exit(f"no Kokoro voice {c['voice']!r}: --voices lists them")
+            folder_made()
+            a, sr = model.create(said, voice=c["voice"], speed=c["speed"], lang=c["lang"])
             soundfile.write(p, a, sr, format="MP3")
             print(f"  spoke: {s[:70]}", flush=True)
-        src = "data:audio/mpeg;base64," + base64.b64encode(p.read_bytes()).decode() if embed else p.as_posix()
-        out.append(dict(src=src, dur=round(soundfile.info(p).duration, 3), t=letters(s)))
-    return out
+        out.append(dict(file=name, at=0, dur=round(soundfile.info(p).duration, 3), t=letters(s)))
+    folder_made()
+    if moved:
+        print(f"  {moved} sentences taken over from media/audio/, spoken by an earlier build")
+    sp = float(c["speed"])
+    write_voice(d, dict(label=c["voice"] + (f" ×{sp:g}" if sp != 1 else "") + (f" {c['lang']}" if d.name.endswith(c["lang"]) else ""),
+                        kind="synthetic", engine="kokoro", voice=c["voice"], speed=c["speed"], lang=c["lang"], steps=out))
+    return d.name, sum(x["dur"] for x in out)
+
+
+def import_voice(name, steps):
+    """A recorded voice: the files in media/voices/<name>/ named by position (03.2.wav, see --script) are bound to
+    the sentence at that position and renamed 03.2-<hash of the file>.wav, so that a later recording under the same
+    name never overwrites one already bound. What voice.js bound before stays bound to its sentence by the text, so a
+    sentence inserted later moves nothing. A sentence whose text changed has no file until it is recorded again."""
+    import soundfile
+
+    d = VOICES / name
+    if not d.is_dir():
+        sys.exit(f"no folder {d}: put the recordings there, named as --script lists them (03.2.wav)")
+    if kind(d) not in (False, "recorded"):
+        sys.exit(f"{d} is a {kind(d)} voice: --voice={read_voice(d).get('voice', name)} builds it")
+    at = {p: letters(s) for p, s in steps}
+    bound = {}  # text key -> file
+    for st in read_voice(d)["steps"] if kind(d) else []:
+        if st["t"] in at.values() and (d / st["file"]).is_file():
+            bound.setdefault(st["t"], st["file"])
+    new = sorted(p for p in d.iterdir() if re.fullmatch(r"\d+\.\d+", p.stem))
+    if bad := [p.name for p in new if p.suffix.lower() not in AUDIO]:
+        sys.exit(f"{d}: {', '.join(bad)}: a recording must be .wav, .mp3, .ogg or .flac (both browsers play these); "
+                 "convert it, e.g. ffmpeg -i 03.2.m4a 03.2.wav")
+    for p in new:  # every new file is read before any is renamed: a bad one leaves the folder as it was
+        try:
+            soundfile.info(p)
+        except Exception as e:  # noqa: BLE001  (soundfile raises its own errors and RuntimeError)
+            sys.exit(f"{p}: cannot be read ({e}); convert it to wav. Nothing was renamed.")
+    if (g := d / ".gitignore").is_file() and g.read_text().strip() == "*":  # left by a --voice= on this folder
+        g.unlink()
+        print(f"  removed {g}: git keeps your recordings")
+    for p in new:
+        n, k = map(int, p.stem.split("."))
+        if (n, k) not in at:
+            print(f"  {p.name}: no sentence at {pos((n, k))} (see --script); left as it is")
+            continue
+        q = p.with_name(f"{pos((n, k))}-{hashlib.sha1(p.read_bytes()).hexdigest()[:6]}{p.suffix.lower()}")
+        p.rename(q)
+        if at[(n, k)] in bound:
+            print(f"  {q.name} replaces {bound[at[(n, k)]]}, which stays in the folder unused")
+        bound[at[(n, k)]] = q.name
+    out = []
+    for p, s in steps:
+        if f := bound.get(letters(s)):
+            try:
+                dur = soundfile.info(d / f).duration
+            except Exception as e:  # noqa: BLE001  (soundfile raises its own errors and RuntimeError)
+                sys.exit(f"{d / f}: cannot be read ({e}); convert it to wav")
+            out.append(dict(file=f, at=0, dur=round(dur, 3), t=letters(s)))
+    write_voice(d, dict(label=name, kind="recorded", steps=out))
+    missing = [(p, s) for p, s in steps if letters(s) not in bound]
+    unused = sorted(p.name for p in d.iterdir() if p.suffix.lower() in AUDIO and p.name not in bound.values())
+    print(f"voice {name}: {len(out)} of {len(steps)} sentences have a recording"
+          + "".join(f"\n  no file for {pos(p)}: {s[:70]}  (record it as {d / pos(p)}.wav)" for p, s in missing)
+          + (f"\n  not used: {', '.join(unused)} (earlier takes, or sentences no longer in the talk)" if unused else ""))
+
+
+def bundle(name, html):
+    """talk-<name>.html: the page with the voice <name> inside (audio as data: URLs), one file that plays offline.
+    It looks for no other voice; the folder version stays as it is."""
+    d = VOICES / name
+    if not (d / "voice.js").exists():
+        sys.exit(f"no voice {name!r} to put in the page: {', '.join(voices()) or 'there is none'}")
+    v = read_voice(d) | {"name": name}
+    for s in v["steps"]:
+        s["file"] = f"data:{AUDIO[Path(s['file']).suffix.lower()]};base64," + base64.b64encode((d / s["file"]).read_bytes()).decode()
+    page, out = html.read_text(), html.with_name(f"{html.stem}-{name}.html")
+    m = re.search(r"<head[^>]*>", page)  # before every script of the page: the player reads it when it starts
+    js = json.dumps(v).replace("</", "<\\/")  # (a label must not close the script)
+    out.write_text(page[:m.end()] + f"\n<script>window.VOICE = {js};</script>" + page[m.end():])
+    print(f"one file: {out}  ({out.stat().st_size / 1e6:.1f} MB, voice {name})")
 
 
 # ---------------------------------------------------------------- checks in headless Chromium
@@ -351,17 +535,23 @@ def chromium(*args, timeout=600):
                            "--host-resolver-rules=MAP * ~NOTFOUND", *args], capture_output=True, text=True, timeout=timeout).stdout
 
 
-def check(html, seconds, theme=None):
-    """Play the talk through at 50x without sound and with the network cut (in `theme`, else the one it opens in).
-    Returns the positions reached, [(slide, sentence)]."""
+def check(html, seconds, theme=None, need=None):
+    """Play the slides through at 50x without a voice and with the network cut (in `theme`, else the one it opens in).
+    Also: every voice of the index loads in the page, which says how many steps each lacks; the voice `need` (made in
+    this build from the same text) lacks none. Returns the positions reached, [(slide, sentence)]."""
+    import html as h
+
     dom = chromium(f"--virtual-time-budget={int(60_000 + 40 * seconds * 1000 / 50 * 2)}", "--dump-dom",
-                   f"{html.resolve().as_uri()}?fast" + (f"&theme={theme}" if theme else ""))
+                   f"{html.resolve().as_uri()}?fast&narrator=none" + (f"&theme={theme}" if theme else ""))
     body = re.search(r"<body[^>]*>", dom)
     if not body:
         sys.exit("check: Chromium returned no page")
-    d = dict(re.findall(r'data-(\w+)="([^"]*)"', body.group(0)))
+    d = {k: h.unescape(v) for k, v in re.findall(r'data-(\w+)="([^"]*)"', body.group(0))}
     log = [tuple(map(int, x.split("."))) for x in d.get("log", "").split()]
-    bad = []
+    got = json.loads(d.get("voices") or "{}")
+    bad = [f"voice {n}: its voice.js did not load in the page" for n in voices() if n not in got]
+    if need and got.get(need):
+        bad.append(f"voice {need}: the page finds no audio for {got[need]} of its sentences, by their text")
     if d.get("error"):
         bad.append(d["error"])
     if not d.get("done"):
@@ -382,6 +572,9 @@ def check(html, seconds, theme=None):
         sys.exit(f"check failed{f' in theme {theme}' if theme else ''}:\n- " + "\n- ".join(bad))
     print(f"check{f' ({theme})' if theme else ''}: {len(log)} steps on {log[-1][0]} slides reached in order, equations rendered, "
           "nothing outside a slide or left hidden, offline")
+    if not theme:
+        print("voices: " + ("; ".join(f"{n} " + (f"lacks {m} step{'s' * (m > 1)} (silent with it)" if m else "complete")
+                                      for n, m in got.items()) or "none: a deck to present by hand"))
     return log
 
 
@@ -471,51 +664,111 @@ def shots(html, log, every=False, size="1280x720"):
 
 
 # ---------------------------------------------------------------- main
+VALUED = {"--size", "--voice", "--speed", "--lang", "--import-voice", "--bundle"}  # --voice=NAME or --voice NAME
+FLAGS = VALUED | {"--script", "--shots", "--themes", "--no-check", "--no-voice", "--voices", "--version"}
+
+
+def options(argv):
+    args, opts = [], {}
+    while argv:
+        a = argv.pop(0)
+        k, eq, v = a.partition("=")
+        if a.startswith("--"):
+            opts[k] = v if eq or k not in VALUED or not argv or argv[0].startswith("--") else argv.pop(0)
+        else:
+            args.append(a)
+    return args, opts
+
+
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    opts = dict(a.split("=", 1) if "=" in a else (a, "") for a in sys.argv[1:] if a.startswith("--"))
-    flags = set(opts)
-    if unknown := flags - {"--script", "--shots", "--size", "--themes", "--no-check", "--voices", "--version"}:
+    args, opts = options(sys.argv[1:])
+    if unknown := set(opts) - FLAGS:
         sys.exit(f"unknown option {sorted(unknown)}\n{__doc__}")
-    if "--version" in flags:
+    if empty := [k for k in VALUED - {"--size"} if k in opts and not opts[k]]:
+        sys.exit(f"{empty[0]} needs a value: {empty[0]}=NAME")
+    if bad := [k for k in ("--speed", "--lang") if k in opts and "--voice" not in opts]:
+        sys.exit(f"{bad[0]} goes with --voice=NAME (the front matter sets the talk's own: narrate: speed:, lang:)")
+    if any((opts.get(k) or "").lower() == "none" for k in ("--voice", "--import-voice", "--bundle")):
+        sys.exit("'none' is the page's name for no voice: give the voice another name")
+    if "--version" in opts:
         return print(VERSION)
-    if "--voices" in flags:
+    if "--voices" in opts:
         return print(" ".join(sorted(kokoro().get_voices())))
     qmd = Path(args[0] if args else "talk.qmd").resolve()
     os.chdir(qmd.parent)
-    name = None
-    if "--script" not in flags:
+    html, name = qmd.with_suffix(".html"), None
+    layer = {"--voice", "--import-voice", "--bundle"} & set(opts)  # a voice, without rendering the slides
+    if "--script" not in opts and not layer:
         c0 = settings(read(qmd, strict=False)[0])
         name = apply_theme(c0["theme"], Path("figures.py").exists(), c0["switch"])
         if Path("figures.py").exists():
             sys.modules["narrate"] = sys.modules[__name__]  # figures.py does `from narrate import figure, values, C`
             runpy.run_path("figures.py", run_name="__main__")
-    meta, body = read(qmd, strict="--script" not in flags)
+    meta, body = read(qmd, strict="--script" not in opts)
     c, deck = settings(meta), slides(meta, body)
-    sentences = [s for _, says in deck for s in says]
+    steps = spoken(deck)
+    sentences = [s for _, s in steps]
     words = sum(len(s.split()) for s in sentences)
-    if "--script" in flags:
+    # the talk's length without a voice, each sentence on its words (as the page estimates it), a silent step 3 s
+    est = (sum(max(1, len(s.split()) * 60 / WPM) + c["gap"] for s in sentences) + len(deck) * (c["lead"] + c["tail"])
+           + 3 * (sum(1 for _, says in deck for s in says if not s) + sum(1 for _, says in deck if not says)))
+    if "--script" in opts:
         for n, (title, says) in enumerate(deck, 1):
             print(f"\n{n}. {title}  ({sum(len(s.split()) for s in says)} words)")
-            for s in says:
+            for k, s in enumerate(says, 1):
                 w = len(s.split())
-                print(f"   {mp3(s, c)[0].name}  {w:3d} w{'  LONG' if w > LONG else ''}  {s}")
-        return print(f"\n{len(deck)} slides, {len(sentences)} sentences, {words} words, about {words / WPM:.1f} min at {WPM} words per minute")
-    say = speech(sentences, c, c["embed"])
-    manifest(say, c, name)
-    seconds = sum(s["dur"] + c["gap"] for s in say) + len(deck) * (c["lead"] + c["tail"])
-    print(f"speech: {len(say)} sentences, {seconds / 60:.1f} min with pauses, voice {c['voice']}; theme {name}", flush=True)
+                print(f"   {pos((n, k))}  " + (f"{w:3d} w{'  LONG' if w > LONG else ''}  {s}" if s else "  (silent step)"))
+        return print(f"\n{len(deck)} slides, {len(sentences)} sentences, {words} words, about {words / WPM:.1f} min at {WPM} words "
+                     "per minute.\nYour own reading: record each sentence as media/voices/NAME/03.2.wav (.mp3, .ogg, .flac), "
+                     "then --import-voice=NAME")
+    if layer:
+        if not html.exists():
+            sys.exit(f"no {html.name}: build the slides first (sh build.sh)")
+        if v := opts.get("--voice"):
+            own = c["voice"] == v
+            cv = c | dict(voice=v, speed=float(opts["--speed"]) if opts.get("--speed") else c["speed"],
+                          lang=opts.get("--lang") or (c["lang"] if own else LANG.get(v[0], "en-us")))
+            made, secs = speech(sentences, cv)
+            print(f"voice {made}: {len(sentences)} sentences, {secs / 60:.1f} min of speech")
+        if v := opts.get("--import-voice"):
+            import_voice(v, steps)
+        names = index()
+        if v := opts.get("--bundle"):
+            bundle(v, html)
+        for n in names:
+            if n != opts.get("--import-voice") and (m := lacks(n, sentences)):  # (an import says which itself; None: unreadable, reported)
+                print(f"voice {n} lacks {len(m)} of {len(sentences)} sentences, which run silently with it")
+        if "--no-check" not in opts:
+            check(html, est)
+        return
+    manifest(c, name)
+    made = need = None
+    if c["voice"] and "--no-voice" not in opts and kind(VOICES / c["voice"]) == "recorded":
+        made, m = c["voice"], lacks(c["voice"], sentences)  # your own reading: nothing to speak
+        print(f"voice {made} (your recording)" + (f": {len(m)} sentences to record (--script, --import-voice)" if m else "")
+              + f"; theme {name}", flush=True)
+    elif c["voice"] and "--no-voice" not in opts:
+        made, secs = speech(sentences, c)
+        need = made  # (the check fails if the voice it just spoke lacks a step)
+        secs += len(sentences) * c["gap"] + len(deck) * (c["lead"] + c["tail"])
+        print(f"speech: {len(sentences)} sentences, {secs / 60:.1f} min with pauses, voice {made}; theme {name}", flush=True)
+    else:
+        print(f"no voice spoken: about {est / 60:.1f} min at {WPM} words per minute; theme {name}", flush=True)
+    index()
     subprocess.run(["quarto", "render", qmd.name], check=True)
-    html = qmd.with_suffix(".html")
-    if "--no-check" not in flags or "--shots" in flags or "--themes" in flags:
-        log = check(html, seconds)
-        if "--themes" in flags:
+    if "--no-check" not in opts or "--shots" in opts or "--themes" in opts:
+        log = check(html, est, need=need)
+        if "--themes" in opts:
             for t in PALETTES:
                 if t != name:
-                    check(html, seconds, t)
-        if "--shots" in flags:
+                    check(html, est, t)
+        if "--shots" in opts:
             shots(html, log, opts["--shots"] == "all", opts.get("--size") or "1280x720")
-    print(f"talk: {html}  ({html.stat().st_size / 1e6:.1f} MB)")
+    print(f"talk: {html}  ({html.stat().st_size / 1e6:.1f} MB, the slides; the voices are in {VOICES}/)")
+    if c.get("embed") is True and made:  # 0.4.0's one file with the speech inside
+        bundle(made, html)
+    elif made:  # (until 0.4.0 talk.html carried the speech by default; now it never does)
+        print(f"  {html.name} holds no voice: send it with {MEDIA}/, or one file with --bundle={made}")
 
 
 if __name__ == "__main__":

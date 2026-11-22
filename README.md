@@ -2,8 +2,9 @@
 
 A scientific talk that tells itself: a Quarto + reveal.js deck in which a synthetic
 voice narrates every slide, sentence by sentence, while the slide builds. The result is
-one HTML page that opens offline. The viewer can let it run like a video, or steer it
-like a deck.
+an HTML page that opens offline, with its voices in a folder beside it (or one file with
+one voice inside). The viewer can let it run like a video, steer it like a deck, pick
+another voice, or present it by hand with none.
 
 ![The starter talk playing, with the outline open](docs/player.png)
 
@@ -42,7 +43,8 @@ chromium talk.html
 The copies need `-L` because the installed skill is a tree of read-only links into the
 Nix store. The first build downloads the voice model (340 MB) to `~/.cache/kokoro/`.
 The starter is a four-slide talk about a random walk, the twin of the video skill's
-starter: 1.3 minutes, 6.8 MB as one file.
+starter: 1.3 minutes; `talk.html` is 6.3 MB, its voice 0.5 MB, and the one-file copy
+with the voice inside (`--bundle`) 7.0 MB.
 
 ## Recording a video
 
@@ -52,9 +54,12 @@ nix shell nixpkgs#ffmpeg -c uv run --no-project --with soundfile --with numpy --
 ```
 
 writes `talk.mp4` beside the page (h264 and aac, the captions as a subtitle track, one
-chapter per slide) and `talk.srt`. Options: `--from=S --to=S` (a stretch, for a trial),
-`--theme=NAME`, `--size=1280x720`, `--fps=25`, `--crf=20`, `-o FILE`. `record.py` needs
-`narrate.py` beside it, ffmpeg and Chromium, and a page whose player is 0.3.0 or later.
+chapter per slide) and `talk.srt`, with the voice the talk opens with. Options:
+`--voice=NAME` (another of its voices; a talk with no voice is refused: it is a deck to
+present by hand), `--from=S --to=S` (a stretch, for a trial), `--theme=NAME`,
+`--size=1280x720`, `--fps=25`, `--crf=20`, `-o FILE`. `record.py` needs `narrate.py`
+beside it, ffmpeg and Chromium, and a page whose player is 0.3.0 or later (`--voice`:
+0.5.0). A sentence the voice lacks is silent in the video, on its estimated length.
 
 How long it takes: a 15-minute talk with 27 clips, 22,378 frames at 1920x1080, took
 5.5 minutes on a 12-thread laptop, with 968 frames photographed. Most of the time is
@@ -156,16 +161,15 @@ and labels, the bullets, the note and the footer sit within 3 px of the video fr
   back. In the speaker view's own window the keys are reveal.js's: space, the arrows
   and a clicker step the same way, but P there steps back and nothing plays the voice.
 - The settings panel (the gear, or `,`) holds the theme (a swatch per theme, drawn in
-  its own colours), voice, captions, auto-advance, the timeline's layout and the slide
-  number, and a link that opens the talk with the current settings. What the viewer
+  its own colours), the voice (none, or one of those beside the page), voice on/off,
+  captions, auto-advance, the timeline's layout and the slide number, and a link that opens the talk with the current settings. What the viewer
   changes is remembered per page in the browser's local storage; a setting in the
   address wins over a remembered one, which wins over the talk's own. Recordings,
   screenshots, the build's check and the speaker view never read or write it.
-- Without its sound the talk still plays. A page opened without its `media/audio/`
-  (`embed: false`) notices the first missing file, says "audio not found — running
-  silently", and runs every sentence on its measured length, as with the voice off.
-  A page rendered without `media/manifest.js` does the same on lengths estimated at
-  155 words per minute.
+- Without a voice the page is a deck to present by hand: no voice button, no warning,
+  and every worded step lasts its words at 155 a minute, so P still runs it by itself,
+  silently. A voice whose file does not load says "audio not found — running silently"
+  and runs on its own lengths, as with the voice off.
 - The timeline has one segment per slide, as wide as the slide is long, grouped and
   labelled by section. In a narrow window it falls back to one segment per section, and
   on a phone to none.
@@ -203,33 +207,49 @@ with the same names (`C.blue`, `C.accent`), and the build writes them into each 
 names instead of fixed colours, so text, equations and drawn figures change together.
 The fonts are carried inside the talk. Clips and pasted images keep their own colours.
 
-## Voices: the slides and the voice as separate layers (planned, 0.5.0 on)
+## Voices: the slides and the voice as separate layers
 
-Status and steps: [`TODO.md`](TODO.md). Until 0.4.0 the voice is part of the page:
-the manifest (sentence files, their lengths, the themes) is rendered into `talk.html`,
-so changing the voice means rebuilding the page. The aim is one presentation that can
-be given with a synthetic voice, with your own voice, or with none (presented by hand),
-where a voice is added, swapped or removed after the slides are built.
+Since 0.5.0 one presentation can be given with a synthetic voice, with your own reading
+of the script, or with none (presented by hand), and a voice is added, swapped or
+removed after the slides are built. Status and next steps: [`TODO.md`](TODO.md); the
+details for authors: `references/authoring.md`, Voices.
 
-- **The slides** (`talk.html`) carry the slides, the narration text and the player,
-  and no voice. Built once, without speech synthesis. With no voice the page is a deck
-  to present by hand: no warning, no voice button; each step has a length estimated
-  from its words, so P can still run it by itself, silently, for a rehearsal.
+- **The slides** (`talk.html`) carry the slides, the narration's text and the player,
+  and no voice: what the talk is besides its voice (pauses, themes, keys, the voice it
+  opens with) is in `media/manifest.js`, rendered into the page. `sh build.sh
+  --no-voice`, or `voice: false` in the front matter, builds them without speech
+  synthesis. With no voice the page is a deck to present by hand: no warning, no voice
+  button; each step has a length estimated from its words, so P can still run it by
+  itself, silently, for a rehearsal.
 - **A voice** is a folder beside the page, `media/voices/<name>/`: its audio and a
   `voice.js` that lists, per step, the file, where in it the step starts, its length,
-  and the text it was made for. The page finds the voices when it opens (as scripts,
-  so it works offline from `file://`), offers them in the settings ("none", a
-  synthetic voice, your recording; also in the address) and remembers the choice.
-  Switching recomputes the clock: timeline, outline times, clips.
+  and the text it was made for. `media/voices/index.js` names the folders. The page
+  loads them as scripts when it opens (a page on `file://` may not fetch files, but may
+  load scripts), offers "none" and each voice in the settings and in the address
+  (`?narrator=NAME`), and remembers the choice. Switching recomputes the clock: each
+  step's length, the timeline, the outline's times, the clips; the current sentence
+  starts again from its beginning, paused if it was. A folder that is gone is simply
+  not offered.
 - **Matched per step.** A sentence edited after a voice was made has no audio in that
-  voice: it runs silently on its estimate, and the settings say how many steps the
-  voice lacks. Only those are synthesised or recorded again.
-- **Sending it:** the folder, or a single file with one voice inside (an export step;
-  until 0.4.0 this was `embed: true`).
+  voice: it runs silently on its estimate, the settings say how many steps the voice
+  lacks, and so does the build's check. Only those are synthesised (`--voice=NAME`) or
+  recorded and imported again (`--import-voice=NAME`).
+- **Synthetic voices** are built into their folder without rendering the slides again
+  (`talk.html` stays byte for byte as it was): `--voice=bm_george`, `--speed=1.2` (folder
+  `bm_george-1.2`). The talk's own voice, `narrate: voice:`, is built with the slides.
+  0.4.0's cache in `media/audio/` is moved into the voice's folder, not spoken again.
+- **Your own reading**: `--script` names each sentence by its place (`03.2`, as the
+  address `#3.2`); record `media/voices/me/03.2.wav` (or mp3, ogg, flac) and run
+  `--import-voice=me`, which measures each file, binds it to its sentence's text and
+  renames it with a hash of its content, so that a later recording never overwrites a
+  bound one. A sentence inserted or edited later leaves the other recordings bound; the
+  import names what to record.
+- **Sending it:** the page with `media/`, or one file with one voice inside:
+  `--bundle=NAME` writes `talk-NAME.html` (0.4.0's `embed: true` now does this).
 
-Two kinds of voice:
+Planned: a free voice (phase 1b) and recording in the page (phase 2).
 
-| | scripted voice (synthetic, or you reading the text) | free voice (you speak freely) |
+| | scripted voice (synthetic, or you reading the text): built | free voice (you speak freely): planned |
 |---|---|---|
 | audio | one file per sentence | one recording per slide |
 | clock | the length of each file, plus the talk's pauses | your cues: a step lasts until the next cue; your pauses are in the recording |
@@ -238,10 +258,10 @@ Two kinds of voice:
 | phrased pointers (`point="#b@phrase"`) | at the phrase | the step's pointers all show for the whole step |
 
 What you say in a free voice is up to you; the recording only needs to know when each
-step starts. The cues come from recording in the page while you present it by hand
+step starts. The cues will come from recording in the page while you present it by hand
 (each Space press is a cue), from tapping Space along an existing recording, or from a
-file of times (Audacity labels). A voice made by a speech engine of your own, or your
-own reading of the script, is a scripted voice: one file per sentence, imported.
+file of times (Audacity labels). The `voice.js` format already holds a step's start
+inside a shared file (`at`), so a free voice fits it without a change.
 
 ## What is in the skill
 
@@ -251,11 +271,12 @@ sci-narrated-talk/
 ├── README.md                     # this file
 ├── docs/                         # the two pictures of this file
 ├── references/authoring.md       # say blocks, figures, numbers, clips, settings, player, failures
-├── scripts/narrate.py            # the build: figures, speech, manifest, render, check, screenshots
+├── scripts/narrate.py            # the build: figures, voices, render, check, screenshots, one-file copies
 ├── scripts/record.py             # a built talk.html to an .mp4
 └── assets/talk/                  # the starter talk
     ├── talk.qmd                  # slides and narration
     ├── figures.py                # numbers and drawings
+    ├── build.sh, README.md        # the build command and a note for whoever works on the talk
     ├── .gitignore
     ├── theme/narrated-talk.scss  # the videos' frame and scene layouts; every colour is a name a theme gives a value
     └── _extensions/narrate/      # the reveal.js plugin (Quarto extension)
@@ -272,24 +293,31 @@ sci-narrated-talk/
 2. **`figures.py`** writes `build/values.yml` and `build/fig/*.html`. A figure is
    matplotlib's SVG with its ids made unique per figure; a part named
    `gid="s2-fit"` is turned into a reveal.js fragment that belongs to sentence 2.
-3. **Speech.** `narrate.py` collects the `say` sentences in document order and speaks
-   each one with Kokoro into `media/audio/<name>.mp3`. The name is a hash of the voice,
-   the speed and the text as spoken, so unchanged sentences are never spoken twice.
-4. **Manifest.** `media/manifest.js` lists, per sentence, the audio (inside the file
-   as base64, or a path), its length, and its letters and digits. The lengths are the
-   talk's clock.
-5. **Render.** `quarto render` builds `talk.html` with everything embedded.
+3. **Manifest.** `media/manifest.js` holds what the talk is without a voice: the
+   pauses, the themes, the keys and the voice it opens with. The deck includes it, so
+   it is rendered into the page.
+4. **Speech.** `narrate.py` collects the `say` sentences in document order and speaks
+   each one the talk's voice lacks with Kokoro into `media/voices/<voice>/<name>.mp3`.
+   The name is a hash of the voice, the speed, the language and the text as spoken, so
+   unchanged sentences are never spoken twice. `voice.js` lists, per sentence, the file,
+   its length and its letters and digits; `media/voices/index.js` names the voice
+   folders. `--voice=NAME` and `--import-voice=NAME` do this step alone.
+5. **Render.** `quarto render` builds `talk.html` with everything but the voices
+   embedded.
 6. **In the browser**, the plugin turns each slide's `say` blocks into hidden reveal.js
    fragments and makes what follows a block a fragment with the same index. Reveal's
    own position (slide, fragment) is therefore always "sentence k of slide n", and the
-   plugin only has to play the right audio file and advance. It compares each
-   sentence's text with the manifest and says so on the start overlay when the page
-   was rendered with older narration. Without the manifest, or without the sentence
-   files, it plays on silently on the lengths it has.
+   plugin only has to play the right audio file and advance. Before reveal.js starts
+   (a plugin's `init` may return a promise), it loads the index and every voice's
+   `voice.js` as scripts, then lays out the clock from the chosen voice: each step finds
+   its file by its text's letters and digits, and a step without one lasts its words at
+   155 a minute and runs silently.
 7. **Check.** `narrate.py` opens the page in headless Chromium with the network cut and
-   `?fast` (no sound, 50 times the speed), and fails the build unless every sentence
-   was reached in order, every equation is rendered, nothing reaches outside its slide,
-   nothing stays hidden, and nothing is loaded from a URL.
+   `?fast&narrator=none` (no voice, 50 times the speed), and fails the build unless
+   every sentence was reached in order, every equation is rendered, nothing reaches
+   outside its slide, nothing stays hidden, nothing is loaded from a URL, every voice
+   of the index loaded, and the voice made in this build lacks no step. It lists the
+   steps each voice lacks.
 
 8. **Recording** (`record.py`). Opened with `?rec`, the page plays nothing by itself:
    `narrate.seek(t)` puts it at second t of the talk (slide, sentence, fades, pointers,
@@ -301,7 +329,10 @@ sci-narrated-talk/
    clip shows at each point (all of it, less in a fade, none under a pointer's line).
    The frame of the clip for that instant is decoded from its file by ffmpeg and added
    in that proportion. The frames go to ffmpeg as they are made, with the sound built
-   from the sentence files at their starts on the talk's clock.
+   from the chosen voice's files at their starts on the talk's clock.
+9. **One file** (`--bundle=NAME`): the rendered page with a script put first in its
+   head that sets the voice, its files as `data:` URLs. The player takes that voice and
+   looks for no other.
 
 ## Requirements
 
@@ -323,21 +354,56 @@ On the starter talk and on variants of it, in headless Chromium on Linux:
   the voice, the pointer lands on its SVG target;
 - Alt+click on a figure part replays its sentence; the outline and the timeline follow;
 - a clip running on the slide's clock, a silent step, a slide without narration;
-- speech inside the page and speech in files beside it;
 - all nine themes from one build, switched in the browser: slides, figures, outline
   and font follow, the voice plays on, and the embedded fonts load with the network cut;
 - a custom accent, and a custom theme refused for low contrast;
 - the check failing on purpose: content hidden behind the author's own pause, and
-  narration changed after the last build;
+  (0.5.0) a sentence the page and the build read differently (a Markdown link);
 - 0.4.0's keys driven key by key (stepping from the start screen without the voice, P,
   a focused button taking space and Enter), the settings panel (each control, kept in
   step with the bar, Esc and clicks outside, no key reaching reveal.js while open),
   remembered settings against the address and a reset, and nothing remembered under
   `?rec`, `?shot`, `?fast` or `?receiver`;
-- the talk without `media/audio/` and without its manifest, played to the end on its
+- (0.4.0) the talk without its audio and without its manifest, played to the end on its
   own: its 1:13 took 72 s, the line grew and the timeline moved with the clock, a pause
   held halfway through a sentence and went on from there;
-- a recorded stretch and the `?shot` screenshots, byte for byte the same as 0.3.0's.
+- a recorded stretch and the `?shot` screenshots against 0.3.0's: the same, but for
+  run-to-run differences in pointer regions that `record.py` also shows between two runs
+  of one version (see below).
+
+Voices (0.5.0), on the starter, in headless Chromium 149 and Firefox 152:
+
+- the slides built without a voice: no synthesis, the check passes, the page opens as
+  a deck to present by hand (no voice button, no warning, the start screen says space
+  steps and P runs it silently); P ran it to the end, silently, in 85.0 s on its 1:25
+  estimate;
+- a synthetic voice added afterwards (`--voice=af_heart`), then two more
+  (`af_heart` at 1.25, `bm_george`): `talk.html` and `media/manifest.js` byte for byte
+  unchanged, every voice in the settings, chosen in the panel and by `?narrator=`,
+  remembered, an unknown name falling back; switching while playing (the sentence
+  starts again in the new voice, the totals 1:13, 1:22, 1:04 follow) and while paused
+  (stays paused, at the start of the sentence); a deleted folder simply absent;
+- an own reading imported from per-sentence files (generated: Kokoro speech converted
+  to wav, and tones of other lengths as ogg, flac, mp3 and wav; an m4a refused): the
+  talk plays on the files' own lengths. One sentence edited and the slides rebuilt:
+  exactly that step runs silently on its estimate, the settings say "1 step without
+  this voice", the check lists it for every voice. Re-imported, the other 11 stay bound;
+  a sentence then inserted before it moved nothing, the import named the two to record,
+  and the new files were bound without overwriting a bound one;
+- a talk built with 0.4.0 (with its `media/audio/`), its copies replaced by 0.5.0 and
+  built with no speech model available: all 12 files taken over, nothing spoken, the
+  lengths those of 0.4.0's manifest; `embed: true` writing the one-file copy;
+- `--bundle`: one file, alone in an empty folder with the network cut, plays its voice
+  (Chromium and Firefox) and looks for no other;
+- `record.py --voice=af_heart` on the 0.5.0 page against 0.4.0's `record.py` on the
+  0.4.0 page of the same talk: sound and subtitles identical, frames identical in one
+  pair of runs (600 frames, 6 to 30 s). Frames are not reproducible from run to run in
+  either version: two runs of one version differ by small amounts in pointer regions.
+  With no voice, `--voice=none` or an unknown name it refuses;
+- 0.4.0's key and settings tests, run against the 0.4.0 and the 0.5.0 page of the same
+  talk: the same results, but for the new voice row and `narrator=` in the link;
+- in Firefox, from `file://`: the voices load as scripts, playing, switching while
+  playing and paused, the one-file copy; no error in the page's console.
 
 The player itself (bar, timeline, outline, keys, zoom, speaker-view silence) was
 developed on a 22-slide, 15-minute research talk before it was generalised here.
@@ -346,16 +412,21 @@ developed on a 22-slide, 15-minute research talk before it was generalised here.
 
 - **By ear.** Nobody has to have listened for the check to pass. Say so in a report.
 - **Other browsers.** Firefox was run headless (152, Linux; driven over Marionette):
-  keys, the settings panel and what it remembers, the voice, a missing audio folder.
+  keys, the settings panel and what it remembers, the voice, a missing audio folder,
+  and 0.5.0's voices beside the page.
   Safari and touch devices are untried; the bar was only measured at phone widths in
   Chromium.
 - **The speaker view as a real window.** Its previews were tested as pages, not as the
   pop-up reveal.js opens.
-- **A long talk as one file.** The starter is 6.8 MB, of which about 5.5 MB is the
-  empty deck with its fonts. Fifteen minutes of speech add about 10 MB; that size is an estimate.
-- **A recorded voice or another speech engine.** The file-by-file replacement is
-  described in `references/authoring.md` and follows from how files are named; it has
-  not been run with another engine.
+- **A long talk as one file.** The starter's one-file copy is 7.0 MB, of which about
+  5.5 MB is the empty deck with its fonts. Fifteen minutes of speech add about 10 MB as
+  mp3; recordings imported as wav are about ten times larger. Both are estimates.
+- **A human voice.** The import was run with generated files only. Nobody has recorded
+  a talk with it, nor listened to whether the pauses between recorded sentences sound
+  natural. Recordings at different sample rates stop `record.py` (it says so).
+- **Many voices, or a long talk with several.** Voices load one after another before
+  the talk starts; tried with four voices of 13 sentences.
+- **Free voice and recording in the page** (phases 1b and 2): not built.
 - **Recording, beyond two talks.** `record.py` was run on the starter and on one
   15-minute talk with 27 clips (Chromium 149, ffmpeg 8 from nixpkgs): frames compared
   with the clips' own frames and with the browser's picture, the sound with the

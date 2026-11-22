@@ -15,12 +15,15 @@ machine is.
   --fps=25           frames per second
   --from=S --to=S    only this stretch of the talk, in seconds (for a trial)
   --theme=NAME       record in that theme
+  --voice=NAME       record with that voice (default: the one the talk opens with; a page of 0.5.0 or later)
   --crf=20           x264 quality (lower is better and larger)
   -o FILE            the output file, .mp4 (default: beside the page, under its name)
 
 What the video does not keep: everything the viewer does with the page (stepping, the outline, replaying a sentence,
 zoom, selecting text, switching the theme or the voice). The page plays a sentence for as long as its file lasts and
-the video for the length the build measured; the two differ by less than a frame per sentence.
+the video for the length the build measured; the two differ by less than a frame per sentence. A talk with no voice is
+not recorded: it is a deck to present by hand. A sentence the voice lacks is silent in the video, on its estimated
+length, as on the page.
 Needs ffmpeg and chromium (or google-chrome) on the PATH, and narrate.py beside this file.
 """
 
@@ -35,13 +38,13 @@ import tempfile
 import time
 from fractions import Fraction
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import narrate  # noqa: E402  (the driven browser)
 
-OPTS = {"--size", "--fps", "--from", "--to", "--crf", "--theme"}
+OPTS = {"--size", "--fps", "--from", "--to", "--crf", "--theme", "--voice"}
 
 
 def stamp(t):
@@ -58,9 +61,10 @@ def sound(steps, total, base, path, t0, t1):
     for st in steps:
         if not st["src"]:
             continue
-        if not st["src"].startswith("data:") and not (base / st["src"]).is_file():
-            sys.exit(f"the speech of slide {st['slide']}, sentence {st['sentence']} is missing: {base / st['src']}")
-        raw = base64.b64decode(st["src"].split(",", 1)[1]) if st["src"].startswith("data:") else (base / st["src"]).read_bytes()
+        f = base / unquote(st["src"])  # (a path relative to the page, as a URL)
+        if not st["src"].startswith("data:") and not f.is_file():
+            sys.exit(f"the speech of slide {st['slide']}, sentence {st['sentence']} is missing: {f}")
+        raw = base64.b64decode(st["src"].split(",", 1)[1]) if st["src"].startswith("data:") else f.read_bytes()
         a, r = soundfile.read(io.BytesIO(raw), dtype="float32", always_2d=True)
         if pcm is None:
             sr, pcm = r, np.zeros(int((total + 1) * r), dtype="float32")
@@ -79,9 +83,9 @@ def sound(steps, total, base, path, t0, t1):
     return path
 
 
-def load(b, html, theme, sized):
+def load(b, html, theme, sized, voice=None):
     """Open the talk in its record mode; returns its timeline."""
-    b.call("Page.navigate", url=html.as_uri() + "?rec" + (f"&theme={theme}" if theme else ""))
+    b.call("Page.navigate", url=html.as_uri() + "?rec" + (f"&theme={theme}" if theme else "") + (f"&narrator={quote(voice)}" if voice else ""))
     if not b.js("new Promise(r => { let n = 0; (function w() {"  # the player says so when it is ready; a page without one never does
                 " window.narrate ? r(1) : (n += document.readyState === 'complete' && !!(window.Reveal?.isReady() ?? 1)) > 40 ? r(0)"
                 " : setTimeout(w, 50); })(); })"):
@@ -160,15 +164,29 @@ def main():
         sys.exit("ffmpeg is not on the PATH (on NixOS: nix shell nixpkgs#ffmpeg -c ...)")
     import numpy as np
 
-    fps, t0, size, theme = float(opts.get("--fps") or 25), float(opts.get("--from") or 0), opts.get("--size"), opts.get("--theme")
+    fps, t0, size, theme, voice = (float(opts.get("--fps") or 25), float(opts.get("--from") or 0), opts.get("--size"),
+                                   opts.get("--theme"), opts.get("--voice"))
     if size and not re.fullmatch(r"\d+x\d+", size):
         sys.exit(f"--size={size}: width x height, as in 1920x1080")
     began, tmp, decs, enc, shots = time.time(), Path(tempfile.mkdtemp()), {}, None, 0
     b = narrate.Browser(size or "1920x1080")
     try:
-        tl = load(b, html, theme, size)
+        tl = load(b, html, theme, size, voice)
         if theme and theme not in tl["themes"]:
             sys.exit(f"--theme={theme}: this talk has {', '.join(tl['themes'])}")
+        if "voice" not in tl:  # a page of 0.4.0 or earlier: its one voice is the one the build put inside it
+            if voice:
+                sys.exit(f"--voice={voice}: this page's player is older than 0.5.0 and has only the voice it was built with")
+        elif voice not in (None, tl["voice"]) or tl["voice"] == "none":
+            has = f"its voices: {', '.join(tl['voices'])}" if tl["voices"] else "it has none; sh build.sh --voice=af_heart makes one"
+            if voice not in (None, "none"):
+                sys.exit(f"--voice={voice}: this talk has no such voice; {has}")
+            if not tl["voices"]:
+                sys.exit(f"no voice to record with: {has}")
+            sys.exit(f"{'--voice=none' if voice else 'this talk opens with no voice'}: a talk without a voice is a deck to "
+                     f"present by hand, not a video. Record it with one of {has}")
+        elif tl["lacks"]:
+            print(f"voice {tl['voice']} lacks {tl['lacks']} sentences: they are silent in the video (the slides changed after it was made)")
         t1 = min(float(opts.get("--to") or 1e9), tl["total"])
         if not 0 <= t0 < t1:
             sys.exit(f"--from={t0:g} --to={t1:g}: the talk runs from 0 to {tl['total']:.1f} s")
@@ -187,7 +205,7 @@ def main():
                 meta += f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={int(a * 1000)}\nEND={int(z * 1000)}\ntitle={esc(name)}\n"
         (tmp / "meta.txt").write_text(meta)
         subs = [(max(t0, st["start"]) - t0, min(t1, st["start"] + st["dur"]) - t0, st["text"]) for st in tl["steps"]
-                if st["src"] and st["start"] < t1 and st["start"] + st["dur"] > t0]
+                if st["text"] and st["start"] < t1 and st["start"] + st["dur"] > t0]
         srt = out.with_suffix(".srt")
         if subs:
             srt.write_text("".join(f"{i}\n{stamp(a)} --> {stamp(z)}\n{text}\n\n" for i, (a, z, text) in enumerate(subs, 1)))

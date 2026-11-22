@@ -11,11 +11,17 @@
  * the start). Of a clip: data-clock="sentence" (starts with the sentence that reveals it), data-once, data-loop.
  * The title slide takes its narration from title-slide-attributes: data-say: "First sentence.|Second sentence."
  *
- * Audio: window.TALK (media/manifest.js, written by narrate.py) lists the spoken sentences in document order (src, dur)
- * and the pauses lead, gap, tail; pre is the beat by which a reveal precedes its sentence. Without a manifest, every
- * sentence lasts its words at 155 a minute and the talk runs silently. A sentence whose file does not load (a page
- * opened without its media/audio/) turns the talk silent from there on: each sentence then runs on its time, as a silent
- * step does, so the reveals, pointers, growing lines and clips keep the talk's pace. atime() is the one clock for all.
+ * The talk: window.TALK (media/manifest.js, written by narrate.py and rendered into the page) holds what it is without a
+ * voice: the pauses lead, gap, tail (pre is the beat by which a reveal precedes its sentence), the themes, the keys, and
+ * the voice it opens with. A voice is a layer beside the page: media/voices/<name>/voice.js sets window.VOICE, with one
+ * entry per step {file, at, dur, t} (t: the sentence's letters and digits, by which a step finds its audio), and
+ * media/voices/index.js (window.VOICES) names the folders. They are loaded as scripts, which work from file:// where a
+ * fetch does not; a folder that does not load is simply absent. A one-file copy (narrate.py --bundle) has its one voice
+ * inside, as window.VOICE. The voice sets the clock: a step lasts its file; a sentence the voice lacks (narration edited
+ * after it was made), and every sentence with no voice, lasts its words at 155 a minute and runs silently. With no voice
+ * the page is a deck to present by hand, which P can also run by itself. A sentence whose file does not load turns the
+ * talk silent from there on: each sentence then runs on its time, as a silent step does, so the reveals, pointers,
+ * growing lines and clips keep the talk's pace. atime() is the one clock for all.
  *
  * Player: a bar over the bottom of the slide (fades when the mouse rests while playing or presented by hand) with a timeline (one segment per
  * slide, as wide as the slide is long; one per section when slides would be < 10 px; none on a phone), and an outline.
@@ -28,14 +34,15 @@
  * keys are handled before reveal.js and not entered in its table, so R and then a key gives that key to reveal.js and
  * its plugins (R ?: its list of keys, R M: its menu). window.TALK.keys renames (a key or a list) or frees (false) them.
  * Each button prints its key.
- * Settings (the gear, ","): theme, voice, captions, auto-advance, timeline, slide number, in a <dialog> that takes every
- * key while open. What the viewer changes is remembered per page in localStorage, never under ?rec ?shot ?fast nor in
- * the speaker view; the address beats what is remembered, which beats the talk's own.
+ * Settings (the gear, ","): theme, the voice (none or one of those found), voice on/off, captions, auto-advance,
+ * timeline, slide number, in a <dialog> that takes every key while open. What the viewer changes is remembered per page
+ * in localStorage, never under ?rec ?shot ?fast nor in the speaker view; the address beats what is remembered, which
+ * beats the talk's own.
  * Alt+click on an element replays the sentence that introduced it (data-k); Ctrl+click is reveal's zoom.
  * URL: #n.k = slide n, sentence k (1-based). ?fast: no audio, 50x speed; body[data-log] lists the visited positions,
  * body[data-over] what reaches outside its slide, body[data-done] the end. ?shot: no player, no transitions; #n alone
- * shows the slide's last sentence (for screenshots). Settings: ?theme=NAME, ?voice= ?cc= ?auto= ?num=on|off,
- * ?tl=auto|slides|sections|none (the timeline's mode).
+ * shows the slide's last sentence (for screenshots). Settings: ?theme=NAME, ?narrator=NAME|none (the voice),
+ * ?voice= ?cc= ?auto= ?num=on|off (voice on/off: muted, the talk keeps its pace), ?tl=auto|slides|sections|none.
  * ?rec: no player and nothing moving by itself; window.narrate.timeline() and .seek(t) give the talk as a function of
  * time, from which record.py makes a video.
  * Themes: window.TALK.themes maps a name to the values of the theme's CSS variables (--bg, --ink, ..., --font), which
@@ -45,7 +52,11 @@
 window.RevealNarrate = () => {
   let deck, T, N, slides, h = 0, k = 0, playing = false, auto = true, phase = 'idle', tok = 0, timer = null;
   let D, S0, TOTAL, groups, secOf, SEC, items = [], built = -1, idleT, theme, cues = [], raw = 0, rawT, DEF;
-  const VERSION = '0.4.0', ARC = new WeakMap(), WPM = 155;  // narrate.py's words per minute: a sentence without audio
+  const VERSION = '0.5.0', ARC = new WeakMap(), WPM = 155;  // narrate.py's words per minute: a sentence without audio
+  // the voices found (name -> its voice.js, with map: text key -> {src, dur}), the one chosen ('none': a deck to present
+  // by hand), how many worded steps it lacks, the text keys of the worded steps
+  let VOX = Object.create(null), voice = 'none', miss = 0, KT = [], ready = false;
+  const norm = t => t.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();  // letters and digits: narrate.py's letters() too
   let numFmt = 'c/t';
   const opened = new Set();  // outline parts the viewer opened by hand (or that the browser's find opened)
   const q = new URLSearchParams(location.search), FAST = q.has('fast'), REC = q.has('rec'), SHOT = q.has('shot') || REC;
@@ -54,7 +65,7 @@ window.RevealNarrate = () => {
   // where settings are remembered: per page; nowhere for a recording, a check run, a screenshot or the speaker view
   const STORE = !(FAST || SHOT || RECV) && 'narrate:' + location.pathname;
   const audio = new Audio(), body = document.body, $ = s => document.querySelector(s);
-  let lost = false;  // the voice is not there (no manifest, or a file that did not load): the talk runs silently
+  let lost = '';  // why the chosen voice cannot be heard (a file that did not load): the talk runs silently
   const voiced = s => s.src && !FAST && !lost;
   // a step taken without playing (the talk presented by hand): it shows complete, its line drawn, every pointer of it on
   // and its clips running, since no voice will bring them
@@ -226,10 +237,10 @@ window.RevealNarrate = () => {
     render();
   }
   function halt() { tok++; clearTimeout(timer); audio.pause(); phase = 'idle'; }
-  function go(nh, nk, play = playing) {
+  function go(nh, nk, play = playing, hd = !play) {  // hd: shown complete, as presented by hand
     if (nh < 0 || nh >= N) return;
     if (RECV) play = false;
-    hand = !play;
+    hand = hd && !play;
     halt();
     place(nh, Math.max(0, Math.min(nk, says(nh).length - 1)));
     playing = play; media(true); ui();
@@ -254,14 +265,7 @@ window.RevealNarrate = () => {
     silent('audio not found — running silently');
     if (playing && phase === 'say') speak();
   }
-  function silent(why) {  // the voice cannot be switched on; the bar says why (and so does the start screen, if up)
-    lost = true;
-    const b = $('#nar-voice');
-    b.disabled = true; b.setAttribute('aria-pressed', false); b.title = why;
-    $('#nar-note').textContent = why;
-    if (!$('#nar-start small').textContent) $('#nar-start small').textContent = why;
-    sync(); wake();
-  }
+  function silent(why) { lost = why; voiceUI(); sync(); wake(); }  // the bar says why (and the start screen, if up)
   function done() {
     phase = 'after';
     // the next step waits for its sentence (idle): not 'after', which would end it at once on a pause and resume, and
@@ -291,6 +295,48 @@ window.RevealNarrate = () => {
     if (phase === 'say') return s.t0 + atime();
     if (phase === 'after' || phase === 'end') return s.t0 + s.dur;
     return k ? s.t0 - T.pre : 0;
+  }
+
+  // The talk's clock from the chosen voice: a step lasts its file, a step the voice lacks (or every step, with none)
+  // its words at WPM, a silent step its wait=; then the slides' lengths, starts and the sections'
+  function clock() {
+    const V = VOX[voice];
+    miss = 0;
+    T.scenes = slides.map((_, j) => {
+      let t = T.lead;
+      const say = says(j).map(e => {
+        const w = words(e.textContent);
+        const a = !w ? {dur: +(e.dataset.wait || 3)} : V?.map.get(norm(w)) || (miss += !!V, {dur: Math.max(1, w.split(' ').length * 60 / WPM)});
+        const o = {...a, t0: t}; t += a.dur + T.gap; return o;
+      });
+      return {say, T: t - T.gap + T.tail};
+    });
+    D = T.scenes.map(s => s.T); S0 = D.map((_, j) => D.slice(0, j).reduce((a, b) => a + b, 0)); TOTAL = S0[N - 1] + D[N - 1];
+    groups.forEach(g => { g.t = S0[g.js[0]]; g.T = g.js.reduce((a, j) => a + D[j], 0); });
+  }
+  // The voices beside the page: index.js names the folders (a page cannot list one), and each folder's voice.js sets
+  // window.VOICE. Loaded as scripts, one after another, since a page opened from file:// may not fetch files; a folder
+  // that is gone or does not load is absent. A one-file copy carries its voice inside and looks for no other.
+  const script = src => new Promise(r => {
+    const e = document.createElement('script');
+    e.onload = () => r(true); e.onerror = () => { e.remove(); r(false); }; e.src = src; document.head.append(e);
+  });
+  async function find() {
+    const take = (v, dir) => {
+      // a kind this player cannot play (a later version's free voice, a step starting inside its file) is left out
+      if (!['synthetic', 'recorded'].includes(v.kind) || (v.steps || []).some(s => +s.at)) return;
+      const map = new Map();
+      for (const s of v.steps || []) if (!map.has(s.t)) map.set(s.t, {src: /^data:/.test(s.file) ? s.file : dir + encodeURIComponent(s.file), dur: s.dur});
+      VOX[v.name] = {...v, map};
+    };
+    if (window.VOICE) return take(window.VOICE, '');
+    if (!(await script('media/voices/index.js'))) return;
+    for (const n of (window.VOICES || []).filter(n => n !== 'none')) {  // ("none" is no voice)
+      const dir = `media/voices/${encodeURIComponent(n)}/`;
+      window.VOICE = null;
+      if ((await script(dir + 'voice.js')) && window.VOICE) take({...window.VOICE, name: n}, dir);
+    }
+    window.VOICE = null;
   }
 
   function tick() {  // every frame: the timeline's fill and the clock; growing paths (a sentence's grow=)
@@ -325,7 +371,8 @@ window.RevealNarrate = () => {
   // shows what the page shows that long after the step began, whatever was recorded before it.
   const record = {
     fx: [],
-    timeline: () => ({total: TOTAL, title: document.title, themes: Object.keys(T.themes || {}), steps: T.scenes.flatMap((sc, j) => sc.say.map((s, n) => (
+    timeline: () => ({total: TOTAL, title: document.title, themes: Object.keys(T.themes || {}), voice, voices: Object.keys(VOX),
+      lacks: miss, steps: T.scenes.flatMap((sc, j) => sc.say.map((s, n) => (
       {slide: j + 1, sentence: n + 1, slideStart: S0[j], start: S0[j] + s.t0, dur: s.dur, src: s.src || null,
        text: words(says(j)[n].textContent), section: SEC[j], heading: titleOf(j)})))}),
     seek(t) {
@@ -488,11 +535,13 @@ that key to reveal.js even where this talk uses it: ${kbd('reveal')} <kbd>?</kbd
 <tr><td>Alt+click</td><td>an element on the slide: replay the sentence that introduced it</td></tr>
 <tr><td>Ctrl+click</td><td>zoom in (reveal.js); again to zoom out</td></tr><tr><td>click, drag</td><td>select text</td></tr></table>
 <p>Keys with Ctrl, Alt or Meta are left to the browser. Click anywhere to close.</p></div></div>
-<div id="nar-start"><div>▶&nbsp; Click${play ? ` or press ${keyName(play)}` : ''} to start${step ? `<span>or step through it yourself with ${keyName(step)}</span>` : ''}<small>${esc(body.dataset.error || '')}</small></div></div>
+<div id="nar-start"><div></div></div>
 <dialog id="nar-set" aria-label="settings"><form method="dialog"><div class="s-top">Settings<button aria-label="close" title="close (Esc)">×</button></div>
 ${TH.length > 1 ? `<fieldset><legend>Theme ${kbd('theme')}</legend><div class="s-themes">${TH.map(([n, v]) => `<label><input type="radio" name="theme" value="${esc(n)}">
 <b style="background:${esc(v.bg)};color:${esc(v.ink)};border-color:${esc(v.light)};font-family:${esc(v.font)}">Aa${['accent', 'blue', 'green', 'purple'].map(c =>
   `<i style="background:${esc(v[c])}"></i>`).join('')}</b>${esc(n)}</label>`).join('')}</div></fieldset>` : ''}
+<fieldset><legend>Voice</legend><div class="s-row">${['none', ...Object.keys(VOX)].map(n => `<label><input type="radio" name="narrator" value="${esc(n)}">
+${esc(VOX[n]?.label || n)}</label>`).join('')}</div><em id="nar-miss"></em></fieldset>
 <fieldset><legend>Play</legend>${box('voice', `voice ${kbd('voice')}<em></em>`)}${box('cc', `captions ${kbd('captions')}`)}
 ${box('auto', `go on to the next slide by itself ${kbd('auto')}`)}${box('num', `slide number ${kbd('number')}`)}</fieldset>
 <fieldset><legend>Timeline</legend><div class="s-row">${['auto', 'slides', 'sections', 'none'].map(v => `<label><input type="radio" name="tl" value="${v}">${v}</label>`).join('')}</div></fieldset>
@@ -550,19 +599,40 @@ ${box('auto', `go on to the next slide by itself ${kbd('auto')}`)}${box('num', `
     theme = name; $('#nar-theme span').textContent = name; body.dataset.theme = name;  // (the page was built in T.theme)
   }
 
+  // the voice's button, the note in the bar and the start screen. With no voice the talk is a deck to present by hand:
+  // no button, no warning, and the start screen says how to step, and that P runs it silently
+  function voiceUI() {
+    const b = $('#nar-voice'), play = KEYS.play[0], step = KEYS.down[0], P = play ? ` or press ${keyName(play)}` : '';
+    b.style.display = voice === 'none' ? 'none' : '';
+    b.disabled = !!lost; b.title = lost || 'voice: off, the talk runs on silently at the same pace';
+    b.setAttribute('aria-pressed', !audio.muted && !lost);
+    $('#nar-note').textContent = lost;
+    const [a, c] = voice === 'none' && step ? [`Step through the talk with ${keyName(step)}`, `or click${P} to let it run by itself, silently`]
+      : [`▶&nbsp; Click${P} to start`, step ? `or step through it yourself with ${keyName(step)}` : ''];
+    $('#nar-start > div').innerHTML = `${a}${c ? `<span>${c}</span>` : ''}<small>${esc(lost)}</small>`;
+  }
+
   // ------------------------------------------------------------ settings
   // By their names in the address (?theme=dark&cc=on): how each is applied. The bar's buttons, the keys and the panel
   // all go through set(), so that they agree, and what the viewer sets there is remembered.
   const OPT = {
     theme: setTheme,
+    // the voice: the clock is laid out again from its lengths, and the sentence shown starts again from its beginning,
+    // playing or paused as it was
+    narrator: v => {
+      voice = v; lost = ''; clock(); voiceUI();
+      outline(); opened.clear(); built = -1;
+      if (ready) go(h, k, playing, hand);
+    },
     voice: v => { audio.muted = !v; $('#nar-voice').setAttribute('aria-pressed', v && !lost); },  // muted, the sentence still plays: the talk keeps its pace
     cc: v => $('#nar-capt').setAttribute('aria-pressed', body.classList.toggle('nar-captions', v)),
     auto: v => { auto = v; $('#nar-auto').setAttribute('aria-pressed', v); },
     tl: v => { tl = v; layout(); },
     num: v => { const c = deck.getConfig().slideNumber; if (c) numFmt = c; deck.configure({slideNumber: v && numFmt}); },
   };
-  const cur = () => ({theme, voice: !audio.muted, cc: body.classList.contains('nar-captions'), auto, tl, num: !!deck.getConfig().slideNumber});
-  const valid = (n, v) => (n === 'theme' ? !!T.themes?.[v] : n === 'tl' ? ['auto', 'slides', 'sections', 'none'].includes(v) : typeof v === 'boolean');
+  const cur = () => ({theme, narrator: voice, voice: !audio.muted, cc: body.classList.contains('nar-captions'), auto, tl, num: !!deck.getConfig().slideNumber});
+  const valid = (n, v) => (n === 'theme' ? Object.hasOwn(T.themes || {}, v) : n === 'narrator' ? v === 'none' || !!VOX[v]
+    : n === 'tl' ? ['auto', 'slides', 'sections', 'none'].includes(v) : typeof v === 'boolean');
   // storage may be blocked (a private window, a browser's rule for file://): then nothing is remembered, and nothing fails
   const recall = () => { try { return (STORE && JSON.parse(localStorage.getItem(STORE))) || {}; } catch { return {}; } };
   const remember = o => { try { if (STORE) o ? localStorage.setItem(STORE, JSON.stringify(o)) : localStorage.removeItem(STORE); } catch { /* blocked */ } };
@@ -573,18 +643,20 @@ ${box('auto', `go on to the next slide by itself ${kbd('auto')}`)}${box('num', `
   }
   function setup() {  // each setting from the address, else from what this browser remembers, else the talk's own
     DEF = {...cur(), theme: T.theme};
-    const mem = recall(), url = n => (n === 'theme' || n === 'tl' ? q.get(n) : {on: true, off: false}[q.get(n)]);
+    const mem = recall(), url = n => (['theme', 'narrator', 'tl'].includes(n) ? q.get(n) : {on: true, off: false}[q.get(n)]);
     for (const n in OPT) {
       const v = [url(n), mem[n], DEF[n]].find(x => valid(n, x)) ?? DEF[n];
-      if (n === 'theme' || v !== cur()[n]) OPT[n](v);
+      if (n === 'theme' || n === 'narrator' || v !== cur()[n]) OPT[n](v);
     }
     sync();
   }
   function sync() {  // the panel shows the settings as they are, and the link that opens the talk with them
     const c = cur(), p = new URLSearchParams(), d = $('#nar-set');
     for (const i of d.querySelectorAll('input[name]')) i.checked = i.type === 'checkbox' ? c[i.name] && !(i.name === 'voice' && lost) : i.value === c[i.name];
-    d.querySelector('[name=voice]').disabled = lost;
-    d.querySelector('[name=voice] ~ em').textContent = lost ? ` (${$('#nar-note').textContent})` : '';
+    d.querySelector('[name=voice]').disabled = !!lost;
+    d.querySelector('[name=voice] ~ em').textContent = lost ? ` (${lost})` : '';
+    d.querySelector('[name=voice]').parentElement.style.display = voice === 'none' ? 'none' : '';  // nothing to switch on
+    $('#nar-miss').textContent = voice !== 'none' && miss ? `${miss} step${miss > 1 ? 's' : ''} without this voice: silent, on ${miss > 1 ? 'their' : 'its'} words` : '';
     // every setting, not only those that differ from the talk's own: the address beats what the receiver's browser remembers
     for (const n in OPT) if (c[n] !== undefined) p.set(n, typeof c[n] === 'boolean' ? (c[n] ? 'on' : 'off') : c[n]);
     $('#nar-link').value = location.href.replace(/[?#].*/, '') + (String(p) ? '?' + p : '');
@@ -627,9 +699,10 @@ ${box('auto', `go on to the next slide by itself ${kbd('auto')}`)}${box('num', `
     const step = act => () => { dismiss(); act(); };  // from the start screen too, without starting the voice
     const ACT = {
       play: () => (started() ? toggle() : begin()), next: step(() => go(h + 1, 0)), prev: step(() => go(h - 1, 0)),
-      down: () => (started() ? nextS() : dismiss()), up: step(prevS),  // the first step only lifts the start screen first: step(() => go(0, 0)), last: step(() => go(N - 1, 0)),
+      down: () => (started() ? nextS() : dismiss()), up: step(prevS),  // (the first step only lifts the start screen)
+      first: step(() => go(0, 0)), last: step(() => go(N - 1, 0)),
       captions: () => $('#nar-capt').click(), outline: () => setOutline(),
-      voice: () => $('#nar-voice').click(), auto: () => $('#nar-auto').click(), theme: () => $('#nar-theme').click(),
+      voice: () => voice !== 'none' && $('#nar-voice').click(), auto: () => $('#nar-auto').click(), theme: () => $('#nar-theme').click(),
       // hide acts on what is on screen: it hides a bar that shows, and brings back one that is hidden or has faded
       hide: idle => body.classList.toggle('nar-hidden', !idle && !body.classList.contains('nar-hidden')),
       help: () => body.classList.toggle('nar-help'),
@@ -688,7 +761,7 @@ ${box('auto', `go on to the next slide by itself ${kbd('auto')}`)}${box('num', `
   return {
     id: 'narrate',
     init(d) {
-      deck = d; T = {lead: 0.7, gap: 0.4, tail: 1.0, pre: 0.2, say: [], ...window.TALK};
+      deck = d; T = {lead: 0.7, gap: 0.4, tail: 1.0, pre: 0.2, ...window.TALK};
       for (const a in KEYS) KEYS[a] = [].concat(T.keys && a in T.keys ? T.keys[a] ?? [] : KEYS[a]).filter(x => x !== false).map(key1);
       const hash = location.hash;  // #n.k is ours: hide it from reveal, which would read #3 as its own slide index
       history.replaceState(null, '', location.pathname + location.search);
@@ -698,22 +771,9 @@ ${box('auto', `go on to the next slide by itself ${kbd('auto')}`)}${box('num', `
         if (!sl.querySelector('.say')) (sl.dataset.say || '').split('|').forEach(t => add(t.trim()));
       });
       slides.forEach(prepare);
-      const norm = t => t.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();  // letters and digits: what narrate.py compares too
-      let n = 0, stale = 0;  // the manifest lists the spoken sentences in document order: lay each slide's clock out from them
-      T.scenes = slides.map((_, j) => {
-        let t = T.lead;
-        const say = says(j).map(e => {
-          const w = words(e.textContent), a = w ? T.say[n++] || {dur: Math.max(1, w.split(' ').length * 60 / WPM)} : {dur: +(e.dataset.wait || 3)};
-          if (a.t !== undefined && a.t !== norm(e.textContent)) stale++;
-          const o = {...a, t0: t}; t += a.dur + T.gap; return o;
-        });
-        return {say, T: t - T.gap + T.tail};
-      });
-      body.dataset.steps = T.scenes.reduce((a, sc) => a + sc.say.length, 0);
+      KT = slides.flatMap((_, j) => says(j).map(e => words(e.textContent)).filter(Boolean).map(norm));
+      body.dataset.steps = slides.reduce((a, _, j) => a + says(j).length, 0);
       if (T.version && T.version !== VERSION) console.warn(`narrate: the player is ${VERSION}, the build script ${T.version}; update the talk's copies of the skill together`);
-      if (window.TALK && (n !== T.say.length || stale)) body.dataset.error = `Narration out of date: the slides have ${n} spoken sentences, the audio ${T.say.length}` +
-        `${stale ? `, and ${stale} differ in wording` : ''}. Run narrate.py again.`;
-      D = T.scenes.map(s => s.T); S0 = D.map((_, j) => D.slice(0, j).reduce((a, b) => a + b, 0)); TOTAL = S0[N - 1] + D[N - 1];
       groups = [];
       let cur = '';  // a slide's section: its sec="..." attribute, else the last section heading (#) before it
       SEC = slides.map(s => { if (s.matches('.level1')) cur = heading(s.querySelector('h1')) || cur; return s.dataset.sec || cur; });
@@ -723,27 +783,33 @@ ${box('auto', `go on to the next slide by itself ${kbd('auto')}`)}${box('num', `
         groups.at(-1).js.push(slides.indexOf(s));
         return groups.length - 1;
       });
-      groups.forEach(g => { g.t = S0[g.js[0]]; g.T = g.js.reduce((a, j) => a + D[j], 0); });
       // reveal turns a window below 435 px into a scrolling page, which the narration cannot follow: keep the deck
       deck.configure({respondToHashChanges: false, hash: false, history: false, scrollActivationWidth: null, ...(SHOT && !REC ? {transition: 'none'} : {})});
       body.classList.toggle('nar-shot', SHOT || RECV); body.classList.toggle('nar-fast', FAST); body.classList.toggle('nar-rec', REC);
-      chrome(); keys(); outline(); setup();
-      if (!window.TALK) silent('no narration audio — running silently');
-      audio.ontimeupdate = () => {  // for checks: where the voice is, and how far the slide's first clip is from it
-        body.dataset.audio = `${h + 1}.${k + 1}@${audio.currentTime.toFixed(1)}`;
-        const v = slides[h].querySelector('video:not([data-clock])');
-        if (v && v.duration) body.dataset.clip = (v.currentTime - (T.scenes[h].say[k].t0 + audio.currentTime) % v.duration).toFixed(2);
-      };
-      deck.on('ready', () => {
-        deck.sync(); deck.layout();
-        document.fonts?.ready.then(() => fit(slides[h]));
-        const [a, b] = hash.slice(1).split('.').map(Number);
-        h = Math.min(N - 1, Math.max(0, (a || 1) - 1));
-        k = SHOT && !b ? 99 : (b || 1) - 1;
-        if (FAST) { dismiss(); go(h, k, true); } else go(h, k, false);
-        if (q.has('autostart')) begin();
-        if (REC) window.narrate = record; else tick();
-      });
+      const own = window.VOICE?.name;  // the voice inside a one-file copy is its talk's voice
+      // reveal waits for this promise before it starts, so the clock is laid out once the voices have loaded or failed
+      return find().catch(() => {}).then(() => {
+        voice = VOX[own || T.voice] ? own || T.voice : 'none';
+        // for the build's check: each voice, and how many worded steps it has no audio for
+        body.dataset.voices = JSON.stringify(Object.fromEntries(Object.entries(VOX).map(([n, v]) => [n, KT.filter(t => !v.map.has(t)).length])));
+        clock(); chrome(); keys(); setup();
+        audio.ontimeupdate = () => {  // for checks: where the voice is, and how far the slide's first clip is from it
+          body.dataset.audio = `${h + 1}.${k + 1}@${audio.currentTime.toFixed(1)}`;
+          const v = slides[h].querySelector('video:not([data-clock])');
+          if (v && v.duration) body.dataset.clip = (v.currentTime - (T.scenes[h].say[k].t0 + audio.currentTime) % v.duration).toFixed(2);
+        };
+        deck.on('ready', () => {
+          deck.sync(); deck.layout();
+          document.fonts?.ready.then(() => fit(slides[h]));
+          const [a, b] = hash.slice(1).split('.').map(Number);
+          h = Math.min(N - 1, Math.max(0, (a || 1) - 1));
+          k = SHOT && !b ? 99 : (b || 1) - 1;
+          ready = true;
+          if (FAST) { dismiss(); go(h, k, true); } else go(h, k, false);
+          if (q.has('autostart')) begin();
+          if (REC) window.narrate = record; else tick();
+        });
+      }).catch(e => console.error('narrate:', e));
     },
   };
 };

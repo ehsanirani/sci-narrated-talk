@@ -1,6 +1,8 @@
 ---
 pagetitle: "How far does a random walker get?"
-# Voice, pauses and theme (all optional). spoken: how to say what the speech engine misreads; captions keep the text.
+# Voice, pauses and theme (all optional). voice: the speech engine's voice the build speaks and the talk opens with;
+# false: none, slides to present by hand (more voices, or your own reading, are added beside the page later).
+# spoken: how to say what the speech engine misreads; captions keep the text.
 # theme: the one the talk opens in: light, dark, paper, sci-talk, sea, journal, chalk, midnight, contrast, or
 # {base: light, accent: "#0b7285"}. The viewer can switch between all of them with the Y key.
 narrate:
@@ -29,10 +31,12 @@ format:
     transition: fade
     transition-speed: fast
     html-math-method: katex
-    # Equations, figures and speech all go into one talk.html that works offline.
+    # Equations and figures go into talk.html, which works offline; the voices stay beside it, in media/voices/
+    # (sh build.sh --bundle=NAME writes one file with a voice inside).
     self-contained-math: true
     embed-resources: true
     revealjs-plugins: [narrate]
+    # what the talk is without a voice (pauses, themes, keys); the voices are folders beside the page, media/voices/
     include-in-header:
       text: '<script src="media/manifest.js"></script>'
 ---

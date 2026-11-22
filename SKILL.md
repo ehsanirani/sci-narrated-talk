@@ -1,6 +1,6 @@
 ---
 name: sci-narrated-talk
-description: Make a scientific talk that tells itself, as one HTML page. A synthetic voice narrates a Quarto + reveal.js deck sentence by sentence while the slide builds, and the viewer can pause, step by sentence or slide, jump through a timeline or an outline, replay the sentence behind any element, zoom, read captions, or switch the voice off. Slides stay real slides (selectable text, KaTeX equations, inline SVG figures whose parts appear and are pointed at as they are mentioned, embedded clips), everything is built locally from one talk.qmd, and the result opens offline. Use whenever the user asks for a narrated talk, a narrated or self-playing presentation, slides with a voice-over, an interactive or clickable version of a video talk, a talk people can watch on their own, or wants such a talk revised (narration, voice, a slide, the figures), even if they only say "make the talk play by itself". The finished talk can also be recorded to an .mp4. Not for a video made without the interactive page (sci-video-talk), a deck the user presents live without narration (sci-talk) or a written report (sci-report).
+description: Make a scientific talk that tells itself, as an HTML page. A synthetic voice (or the author's own recorded reading of the script) narrates a Quarto + reveal.js deck sentence by sentence while the slide builds, and the viewer can pause, step by sentence or slide, jump through a timeline or an outline, replay the sentence behind any element, zoom, read captions, pick another voice, or present it by hand with none. Slides stay real slides (selectable text, KaTeX equations, inline SVG figures whose parts appear and are pointed at as they are mentioned, embedded clips), everything is built locally from one talk.qmd, and the result opens offline. Use whenever the user asks for a narrated talk, a narrated or self-playing presentation, slides with a voice-over, an interactive or clickable version of a video talk, a talk people can watch on their own, or wants such a talk revised (narration, voice, a slide, the figures), even if they only say "make the talk play by itself". The finished talk can also be recorded to an .mp4. Not for a video made without the interactive page (sci-video-talk), a deck the user presents live without narration (sci-talk) or a written report (sci-report).
 ---
 
 # sci-narrated-talk
@@ -12,6 +12,12 @@ the source appears on the slide when that sentence starts.
 
 The speech is the clock. Each sentence is one audio file; the reveals, the timeline and
 the outline follow the measured lengths. Nothing is timed by hand.
+
+The slides and the voice are separate layers. `talk.html` is the slides, with no voice
+inside; each voice is a folder beside it (`media/voices/<name>/`), found by the page when
+it opens and offered in its settings, with "none" for presenting by hand. A voice is
+added, completed or deleted without rendering the slides again, and a step whose
+sentence changed after a voice was made runs silently on its estimated length.
 
 Unlike a video, the viewer steers: they can stop, go back one sentence, jump to a slide,
 or click a curve to hear it explained again. Unlike a live talk, nobody can ask a
@@ -28,15 +34,17 @@ Ask only for what the project does not already answer.
 - **Where every number comes from**: a numbers file or generated values. Nothing is
   typed in from memory.
 - **Voice**: default `af_heart` (Kokoro; `--voices` lists them). For samples to choose
-  from, use `sci-video-talk`'s `--voices NAME ...`.
+  from, use `sci-video-talk`'s `--voices NAME ...`. More voices can sit beside the page
+  (another Kokoro voice or speed, the author's own reading); `voice: false` builds slides
+  to present by hand.
 - **Theme**: the one the talk opens in: `light` (default), `dark`, `paper`, `sci-talk`,
   `sea`, `journal`, `chalk`, `midnight`, `contrast`, or colours of the user's own. The
   look is the videos' frame and the themes are the same nine as `sci-video-talk`. All
   of them travel in the page; the viewer switches with the Y key or in the settings
   (`,`) at any moment, and slides, drawn figures and font follow.
-- **One file or a folder**: one `talk.html` with the speech inside (default), or the
-  speech beside the page (`narrate: {embed: false}`) for a long talk or one with clips.
-  A page that has lost its `media/` still plays, silently, at the talk's pace.
+- **How it is sent**: `talk.html` with its `media/` folder (default), or one file with one
+  voice inside (`--bundle=NAME` writes `talk-NAME.html`). A page that has lost its
+  `media/` opens as slides to present by hand.
 
 ## Start
 
@@ -71,8 +79,12 @@ command out: a shell variable holding it does not split in zsh.
 
 | command | does |
 |---|---|
-| `NT --script` | the narration per slide: words, flagged long sentences, audio file names, total minutes. Builds nothing |
-| `NT` | the whole build: `figures.py`, speech for new or changed sentences, `quarto render`, then the run-through check |
+| `NT --script` | the narration per slide: words, flagged long sentences, each sentence's recording name (`03.2`), total minutes. Builds nothing |
+| `NT` | the whole build: `figures.py`, the talk's voice for new or changed sentences, `quarto render`, then the run-through check |
+| `NT --no-voice` | the build without speaking anything |
+| `NT --voice=bm_george` | add or complete a synthetic voice (`--speed=1.2`, `--lang=en-gb`), without rendering the slides |
+| `NT --import-voice=me` | bind recordings in `media/voices/me/` (named `03.2.wav`, as `--script` lists them) to their sentences |
+| `NT --bundle=af_heart` | `talk-af_heart.html`: the page with that voice inside, one file |
 | `NT --shots` | the build, then a screenshot of every slide's last stage and contact sheets in `build/shots/` |
 | `NT --shots=all --size=1920x1080` | also a screenshot of every sentence (`build/shots/all/`), at that size |
 | `NT --themes` | the build, with the check run in every theme the talk can be switched to |
@@ -80,8 +92,11 @@ command out: a shell variable holding it does not split in zsh.
 | `NT --voices` | the voice names |
 | `NT --version` | the version of the skill these copies come from |
 
-Output: `talk.html`. Speech is cached per sentence in `media/audio/`, so a rebuild after
-a text change speaks only the changed sentences and takes seconds.
+Output: `talk.html` (the slides) and `media/voices/<voice>/` (the voice). A voice keeps
+one file per sentence, so a rebuild after a text change speaks only the changed
+sentences and takes seconds; a talk built with 0.4.0 keeps its speech (the build moves
+`media/audio/` into the voice's folder). Voices, the `voice.js` format and the import of
+an own reading: `references/authoring.md`, Voices.
 
 ## Recording a video
 
@@ -94,8 +109,10 @@ nix shell nixpkgs#ffmpeg -c uv run --no-project --with soundfile --with numpy --
 ```
 
 It writes `talk.mp4` beside the page (h264 and aac, the captions as a subtitle track,
-one chapter per slide) and `talk.srt`. `--from=S --to=S` records a stretch for a trial,
-`--theme=NAME` another theme, `--size=1280x720`, `--fps=25`, `--crf=20`, `-o FILE`.
+one chapter per slide) and `talk.srt`, with the voice the talk opens with; `--voice=NAME`
+records with another, and a talk with no voice is refused. `--from=S --to=S` records a
+stretch for a trial, `--theme=NAME` another theme, `--size=1280x720`, `--fps=25`,
+`--crf=20`, `-o FILE`.
 A 15-minute talk with 27 clips took 5.5 minutes on a 12-thread laptop.
 
 The video is the page at every instant, not a screen capture: the same fades, pointers
@@ -183,8 +200,8 @@ The rules of a talk nobody can interrupt, as in `sci-video-talk`:
 
 ## Report back
 
-The path of `talk.html` and its size; length, slide and sentence count; the voice; what
-the check said; how the viewer steers it (P plays, space steps, so the same page can
+The path of `talk.html` and its size; length, slide and sentence count; the voices
+beside it and the steps each lacks; what the check said; how the viewer steers it (P plays, space steps, so the same page can
 be presented by hand or with a clicker; arrows, T for the outline, `,` for the settings,
 which the browser remembers, `?` for the rest); and plainly whether anyone has listened to the audio. The check proves that the
 talk runs, not that the voice is pleasant or a name sounds right.
@@ -195,13 +212,16 @@ project's own rules for where status and dated records go.
 
 ## Not built
 
-Say so when asked, rather than improvising: speech engines other than Kokoro, except by
-dropping files into `media/audio/`; a two-voice dialogue; background music.
+Say so when asked, rather than improvising: speech engines other than Kokoro, except as
+files imported per sentence (`--import-voice`); a free voice (one recording per slide,
+spoken freely, with cues) and recording in the page, both planned (`TODO.md`); a
+two-voice dialogue; background music.
 
 ## References
 
 - `references/authoring.md`: the `say` block and its attributes, the title slide, silent
   steps, `figure()` and `values()`, themes, clips, front-matter settings, the player's keys and
-  URL switches, a recorded voice, what is cached. Read before writing the first slide.
+  URL switches, voices (synthetic, an own reading, one file, the `voice.js` format), what is
+  cached. Read before writing the first slide.
 - `README.md`: what the pieces are and how they fit; read when something in the player
   or the build has to change.

@@ -16,7 +16,7 @@ below once.
 - [Clips and images](#clips-and-images)
 - [Front matter](#front-matter)
 - [The player](#the-player)
-- [A recorded voice or another speech engine](#a-recorded-voice-or-another-speech-engine)
+- [Voices](#voices)
 - [What is cached, what is rebuilt](#what-is-cached-what-is-rebuilt)
 - [When something fails](#when-something-fails)
 
@@ -278,13 +278,12 @@ another colour.
 ```yaml
 pagetitle: "The talk's title"   # the footer's text; not `title:`
 narrate:
-  voice: af_heart        # Kokoro voice; af_/am_ American, bf_/bm_ British
+  voice: af_heart        # Kokoro voice the build speaks and the talk opens with; false: none (see Voices)
   speed: 1.0             # speaking rate
   lang: en-us            # only to override the voice's language
   lead: 0.7              # silence before a slide's first sentence, seconds
   gap: 0.4               # between sentences
   tail: 1.0              # after the last sentence, before the next slide
-  embed: true            # speech inside talk.html; false: files in media/audio/
   switch: true           # false: the viewer cannot change the theme (see Themes)
   keys: {theme: false}   # the player's keys by action: a key or a list replaces its keys, false frees them
   theme: light           # see Themes
@@ -306,17 +305,22 @@ format:
     self-contained-math: true
     html-math-method: katex
     revealjs-plugins: [narrate]
-    include-in-header:
+    include-in-header:                     # the talk without its voice: pauses, themes, keys
       text: '<script src="media/manifest.js"></script>'
 ```
 
-Everything under `narrate:` is optional. Changing the voice or the speed speaks every
-sentence again; the old files stay cached. The theme is laid out for the 1920 x 1080
-canvas; sizes on a slide are in `em`, where 1em is the body text.
+Everything under `narrate:` is optional. Changing the voice or the speed makes another
+voice folder and speaks every sentence for it; the old folder stays and stays on offer
+in the page until it is deleted. The theme is laid out for the 1920 x 1080 canvas; sizes
+on a slide are in `em`, where 1em is the body text.
 
-With `embed: false`, ship `talk.html` together with `media/`. Opened without it, the
-page plays on silently: at the first sentence whose file is missing it says "audio not
-found — running silently" and runs every sentence on its measured length.
+`embed:` belongs to 0.4.0, when the voice was inside `talk.html`. Talks that still have
+it build unchanged: `embed: true` also writes the one-file copy with the talk's voice
+(`talk-<voice>.html`, as `--bundle` does), and `embed: false` changes nothing, since a
+voice is now always a folder beside the page. Note the old default: a 0.4.0 talk with no
+`embed:` at all got one file with the speech inside; it now gets a `talk.html` without a
+voice and its voice in `media/voices/`. Send the folder, or the `--bundle` copy (the
+build's last line says so).
 
 ## The player
 
@@ -372,7 +376,8 @@ narrate:
 ```
 
 **Settings** (the gear on the bar, or `,`): the theme (one swatch per theme, in its own
-colours; not shown when `switch: false` leaves one), voice, captions, auto-advance, the
+colours; not shown when `switch: false` leaves one), the voice (none, or one of the
+voices beside the page; see Voices), voice on/off, captions, auto-advance, the
 timeline's layout (`auto`, `slides`, `sections`, `none`) and the slide number, the same
 switches as the bar's buttons and keys, and a link that opens the talk with the
 current settings. While the panel is open it takes every key; Esc, `,` or a click
@@ -391,39 +396,146 @@ URL switches, for checks and links:
 | `talk.html?fast` | play through without sound at 50 times the speed (the build's check) |
 | `talk.html?autostart` | start without the click (works only where the browser allows sound unasked) |
 | `talk.html?theme=dark` | open in that theme; combines with the others (`?shot&theme=dark#5`) |
-| `talk.html?voice=off&cc=on&auto=off&num=off` | voice, captions, auto-advance, slide number: `on` or `off` |
+| `talk.html?narrator=me` | open with that voice (a folder of `media/voices/`); `?narrator=none`: no voice |
+| `talk.html?voice=off&cc=on&auto=off&num=off` | voice (muted: the talk keeps its pace), captions, auto-advance, slide number: `on` or `off` |
 | `talk.html?tl=sections` | the timeline's layout: `auto`, `slides`, `sections` or `none` |
 
 A browser plays no sound before the first click or key press, hence the start overlay:
-a click or P plays, a step key steps without the voice.
+a click or P plays, a step key steps without the voice. With no voice the overlay says
+to step with space, and P runs the talk by itself, silently, on its estimated lengths
+(a rehearsal); there is no voice button and no warning.
 
-## A recorded voice or another speech engine
+## Voices
 
-An audio file that already exists under a sentence's name is used as it is. `--script`
-prints the name of every sentence's file (`media/audio/<name>.mp3`); record or
-synthesise the sentences elsewhere, save them under those names as mp3, and build. The
-name depends on the voice, the speed and the sentence as spoken, so a changed sentence
-asks for a new file. This path is described, not tested with another engine.
+The slides and the voice are separate layers. `talk.html` holds the slides, the
+narration's text and the player, and no voice. A voice is a folder beside it,
+`media/voices/<name>/`: its audio and a `voice.js`. The page finds the voices when it
+opens and offers them in the settings, with "none"; the address picks one
+(`?narrator=me`), and the browser remembers the viewer's choice. A voice is added,
+replaced or deleted without rendering the slides again: delete its folder and the page
+no longer offers it.
+
+The clock follows the voice. A step lasts as long as its file; switching the voice in
+the page lays out every length, the timeline, the outline's times and the clips again,
+and the sentence on screen starts again from its beginning (paused, if it was).
+
+**No voice** (`voice: false`, or "none" in the settings): slides to present by hand. No
+warning and no voice button; each worded step lasts its words at 155 a minute, so P can
+still run the talk by itself, silently, as a rehearsal.
+
+**Matched by the text.** Each step finds its audio in the voice by the sentence's
+letters and digits. A sentence edited after a voice was made has no audio in that voice:
+that step runs silently on its estimated length, the settings say "N steps without this
+voice", and the build's check lists, per voice, how many steps it lacks. Only those
+sentences need speaking or recording again.
+
+| command | does |
+|---|---|
+| `sh build.sh` | the slides, and the voice of `narrate: voice:` (only the sentences it lacks are spoken) |
+| `sh build.sh --no-voice` | the slides only |
+| `sh build.sh --voice=bm_george` | add or complete a synthetic voice; `--speed=1.2`, `--lang=en-gb` for another pace or language |
+| `sh build.sh --script` | every sentence with its recording name (`03.2`: slide 3, step 2, as `talk.html#3.2`) |
+| `sh build.sh --import-voice=me` | bind the recordings in `media/voices/me/` to their sentences |
+| `sh build.sh --bundle=me` | `talk-me.html`: the page with that voice inside, one file to send |
+
+`--voice`, `--import-voice` and `--bundle` leave `talk.html` as it is (byte for byte);
+build the slides first.
+
+**A synthetic voice** is named after the Kokoro voice, with its speed and language
+where they are not the voice's own: `af_heart`, `af_heart-1.2`, `af_heart-1.2-en-gb`.
+Its files are named by a hash of voice, speed, language and the sentence as spoken, so
+an unchanged sentence is never spoken twice; files of sentences that went stay in the
+folder. The folder holds a `.gitignore` of `*`, since the build can make it again.
+
+**Your own reading of the script** (or another engine's speech): one file per sentence.
+
+1. `sh build.sh --script` lists every sentence with its name, `03.2`.
+2. Record each sentence as `media/voices/me/03.2.wav`. `.wav`, `.mp3`, `.ogg` and
+   `.flac` are taken (both browsers play them, and the build can measure them); any
+   other format is refused, with the command to convert it.
+3. `sh build.sh --import-voice=me` reads every new file first (one it cannot read stops
+   the import and nothing is renamed), then binds each to the text of the sentence at
+   its position and renames it `03.2-<hash>.wav`. It lists the sentences that have no
+   file yet.
+
+Positions are read at the import: import a batch of recordings before editing the
+slides, or a file recorded from an older `--script` listing goes to whatever sentence
+now stands at its position. `narrate: voice: me` makes your reading the voice the talk
+opens with; the build then speaks nothing, and says how many sentences are still to
+record. `none` is not a voice name (it means no voice in the page).
+
+What an import bound stays bound to its sentence by the text, so a sentence inserted
+later moves nothing. After the slides change, build them, then import again: it names
+the sentences to record (under their new positions; the renaming means a new `03.2.wav`
+cannot overwrite a recording already bound). A new `03.2.wav` for a sentence that has a
+recording replaces it; the earlier take stays in the folder, listed as not used. A
+recorded voice has no `.gitignore` (an import removes one that a mistaken `--voice=`
+left): keep it in git, it cannot be made again. `--voice=` refuses a folder that holds
+recordings.
+
+**One file.** `--bundle=NAME` writes `talk-NAME.html` with that voice's audio inside, to
+send as one file that plays offline. It offers that voice and "none", and looks for no
+other. The folder version stays as it is.
+
+**`voice.js`**, written by `narrate.py`:
+
+```js
+window.VOICE = {"name": "me", "label": "me", "kind": "recorded", "version": "0.5.0", "steps": [
+  {"file": "01.1-27cb18.wav", "at": 0, "dur": 4.096, "t": "releaseacrowdofwalkersfromonepoint..."},
+  ...
+]};
+```
+
+| field | meaning |
+|---|---|
+| `name` | the folder it was made in (the page names a voice by its folder) |
+| `label` | its name in the settings |
+| `kind` | `synthetic` (made by the build; also `engine`, `voice`, `speed`, `lang`) or `recorded` (imported) |
+| `version` | of the skill that wrote it |
+| `steps[].file` | the audio, relative to the folder (in a one-file copy, a `data:` URL) |
+| `steps[].at` | where the step starts inside its file, seconds; 0 for a file of its own |
+| `steps[].dur` | the step's length, seconds: its file's, measured by the build |
+| `steps[].t` | the sentence's letters and digits, lower case: the key by which a step finds its audio |
+
+A step the voice has no entry for is a step it lacks. Fields a reader does not know are
+ignored, but a voice whose `kind` it does not know, or with a step whose `at` is not 0,
+is left out (a 0.5.0 page does not offer a later version's free voice it would misplay). Planned (phase 1b): a free voice, `kind: "free"`, one recording per slide with a
+step per cue: entries share a file with increasing `at`, carry the step's place (by
+which they are matched, `t` kept to notice later edits), and play on without pauses
+between them, with captions off and a step's phrased pointers all on.
 
 ## What is cached, what is rebuilt
 
-- `media/audio/*.mp3`: one file per sentence, kept across builds. Files of sentences
-  that no longer exist stay there; delete the folder to start clean (everything is
-  spoken again).
+- `media/voices/<name>/`: a voice, one file per sentence, kept across builds (see
+  Voices). A synthetic voice speaks only what it lacks; delete its folder to start clean.
+  A build of 0.5.0 moves the files a 0.4.0 build left in `media/audio/` into the voice's
+  folder instead of speaking them again.
 - `build/`: figures, values, screenshots. Rewritten by every build.
-- `media/manifest.js`: the sentence files and lengths. Rewritten by every build; the
-  page reports it when it does not match the slides ("Narration out of date"). A page
-  rendered without one (`quarto render` before the first build) runs silently, each
-  sentence lasting its words at 155 a minute, and says "no narration audio".
+- `media/manifest.js`: the talk without its voice (pauses, themes, keys, the voice it
+  opens with), rendered into the page. `media/voices/index.js`: the voice folders, which
+  the page cannot list for itself. Both rewritten by every build.
 - `~/.cache/kokoro/` (`KOKORO_DIR`): the voice model, 340 MB, downloaded once.
 
 ## When something fails
 
-- **"audio not found — running silently"** in the bar: the page was opened without
-  the `media/audio/` it was built with (`embed: false`). Ship the folder with the page.
-- **"Narration out of date" on the start overlay**: the slides were rendered without
-  `narrate.py` (for example by `quarto preview`) after the narration changed. Run the
-  build.
+- **"audio not found — running silently"** in the bar: a file of the chosen voice did
+  not load (its folder is incomplete). The talk runs on silently on that voice's
+  lengths. Ship `media/` with the page, or send a `--bundle` copy.
+- **"N steps without this voice" in the settings**: the narration changed after the
+  voice was made. `sh build.sh --voice=NAME` speaks the missing sentences;
+  `--import-voice=NAME` names the ones to record.
+- **No voice in the settings**: the page was opened without `media/voices/` beside it
+  (or as a one-file copy of another voice). It is a deck to present by hand.
+- **Check: "voice X: the page finds no audio for N of its sentences"**: the build and
+  the page read a sentence's text differently (a Markdown link in a sentence, for
+  example). Write the sentence as plain words.
+- **Check: "voice X: its voice.js did not load"**, or the build says it cannot be
+  read: the file is broken (edited by hand). A synthetic voice: delete `voice.js` and
+  build the voice again; its audio is kept and nothing is spoken twice. Your own
+  reading: the files keep their place in their names (`03.2-1a2b3c.wav`); rename them
+  back to `03.2.wav`, delete `voice.js` and import again, before the slides change.
+  (The build writes `voice.js` whole and then renames it, so an interrupted build does
+  not break it.)
 - **Check: "content that no sentence reveals"**: a reveal.js fragment or `. . .` pause
   of the author's own on that slide. The narration never steps through it, so it would
   stay hidden; stage with `say` blocks only.

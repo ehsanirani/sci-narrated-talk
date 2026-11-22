@@ -1,7 +1,9 @@
 build/
 media/audio/
 media/manifest.js
+media/voices/index.js
 talk.html
+talk-*.html
 talk_files/
 .quarto/
 __pycache__/
