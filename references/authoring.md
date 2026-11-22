@@ -211,8 +211,8 @@ narrate:
 They are the nine themes of `sci-video-talk`, so a video and a narrated talk of the
 same story can match. `narrate: theme:` is the theme the talk opens in. All nine (and
 a custom one) travel in the page, and the viewer moves to the next with the Y key or
-the bar's theme button, at any moment and without interrupting the voice;
-`talk.html?theme=dark` opens in one.
+the bar's theme button, or picks one in the settings (`,`), at any moment and without
+interrupting the voice; `talk.html?theme=dark` opens in one.
 
 How it works: a theme has no style rules. It is a set of values for nine names:
 eight colours (`--bg`, `--ink`, `--muted`, `--light`, `--accent`, `--blue`, `--green`,
@@ -286,7 +286,7 @@ narrate:
   tail: 1.0              # after the last sentence, before the next slide
   embed: true            # speech inside talk.html; false: files in media/audio/
   switch: true           # false: the viewer cannot change the theme (see Themes)
-  keys: {theme: false}   # the player's keys by action: a letter renames one, false frees it
+  keys: {theme: false}   # the player's keys by action: a key or a list replaces its keys, false frees them
   theme: light           # see Themes
   spoken:                # written: spoken; changes the speech, not the captions
     "Péclet": "Pay-clay"
@@ -314,15 +314,18 @@ Everything under `narrate:` is optional. Changing the voice or the speed speaks 
 sentence again; the old files stay cached. The theme is laid out for the 1920 x 1080
 canvas; sizes on a slide are in `em`, where 1em is the body text.
 
-With `embed: false`, ship `talk.html` together with `media/`.
+With `embed: false`, ship `talk.html` together with `media/`. Opened without it, the
+page plays on silently: at the first sentence whose file is missing it says "audio not
+found — running silently" and runs every sentence on its measured length.
 
 ## The player
 
 | key | does |
 |---|---|
-| space | play / pause |
+| P | play / pause |
+| space, Enter, ↓, PgDn | next step: the next sentence, after the last one the next slide |
+| Backspace, ↑, PgUp | previous step |
 | ← → | previous / next slide |
-| ↑ ↓ | previous / next sentence |
 | Home, End | first / last slide |
 | C | captions |
 | T | outline: sections, slides, the sentences of the current slide |
@@ -331,8 +334,20 @@ With `embed: false`, ship `talk.html` together with `media/`.
 | Y | next theme |
 | X | hide / show the bar |
 | # | slide number on / off |
+| , | settings |
 | ? | the talk's keys and mouse actions |
 | R, then a key | that key as reveal.js defines it: R ? shows reveal.js's own list of keys, R M its menu |
+
+Space steps and P plays. A step taken without playing shows that stage complete
+without the voice (its `grow=` line drawn, every pointer of the sentence on, its clips
+running), so the page can be presented by hand: never press P, and step with the space
+bar or a presentation clicker (they send PageDown and PageUp); the bar fades as it
+does while playing. On the start screen the first step only lifts it, so the audience
+sees the title slide first. Shift+space steps back. Stepping while the talk plays
+keeps it playing. Space and Enter on a button reached with Tab press that button
+(Enter on a focused link follows it; space still steps). In the speaker view's own
+window (S) the keys are reveal.js's: space, the arrows and a clicker step the same
+way, but P there steps back and the voice cannot be started from it.
 
 Mouse: click a slide on the timeline to jump; click a line of the outline to play from
 there; Alt+click an element to replay the sentence that introduced it; Ctrl+click
@@ -343,9 +358,29 @@ table. So every key the talk does not use is reveal.js's as always (H J K L, F
 fullscreen, O overview, S speaker view, where the notes are the slide's narration), and
 the prefix R hands the next key to reveal.js and its plugins even where the talk uses
 it. The help (`?`) has buttons for reveal.js's own list of keys and for its menu. Keys
-with Ctrl, Alt or Meta are left to the browser. `narrate: keys:` renames or frees a
-key by its action: `play`, `next`, `prev`, `up`, `down`, `first`, `last`, `captions`,
-`outline`, `voice`, `auto`, `theme`, `hide`, `number`, `help`, `reveal`.
+with Ctrl, Alt or Meta are left to the browser.
+
+`narrate: keys:` gives an action other keys or frees it: the action, then one key, a
+list of keys, or `false`. A key is a letter or the name the browser gives it (`Enter`,
+`PageDown`, `ArrowUp`, `space`). The actions: `play`, `next`, `prev`, `up`, `down`,
+`first`, `last`, `captions`, `outline`, `voice`, `auto`, `theme`, `hide`, `number`,
+`settings`, `help`, `reveal`.
+
+```yaml
+narrate:
+  keys: {play: [p, k], down: [space, PageDown], up: PageUp, theme: false}
+```
+
+**Settings** (the gear on the bar, or `,`): the theme (one swatch per theme, in its own
+colours; not shown when `switch: false` leaves one), voice, captions, auto-advance, the
+timeline's layout (`auto`, `slides`, `sections`, `none`) and the slide number, the same
+switches as the bar's buttons and keys, and a link that opens the talk with the
+current settings. While the panel is open it takes every key; Esc, `,` or a click
+outside closes it. What the viewer changes is remembered for that page in the
+browser's local storage (nothing breaks where storage is blocked), and "back to the
+talk's own settings" forgets it. A setting in the address wins over a remembered one,
+which wins over the talk's own; recordings, screenshots, the build's check and the
+speaker view never read or write what is remembered.
 
 URL switches, for checks and links:
 
@@ -356,10 +391,11 @@ URL switches, for checks and links:
 | `talk.html?fast` | play through without sound at 50 times the speed (the build's check) |
 | `talk.html?autostart` | start without the click (works only where the browser allows sound unasked) |
 | `talk.html?theme=dark` | open in that theme; combines with the others (`?shot&theme=dark#5`) |
-| `talk.html?voice=off&cc=on&auto=off` | open with the voice off, captions on, auto-advance off |
-| `talk.html?tl=sections` | force a timeline layout: `slides`, `sections` or `none` |
+| `talk.html?voice=off&cc=on&auto=off&num=off` | voice, captions, auto-advance, slide number: `on` or `off` |
+| `talk.html?tl=sections` | the timeline's layout: `auto`, `slides`, `sections` or `none` |
 
-A browser plays no sound before the first click or key press, hence the start overlay.
+A browser plays no sound before the first click or key press, hence the start overlay:
+a click or P plays, a step key steps without the voice.
 
 ## A recorded voice or another speech engine
 
@@ -376,11 +412,15 @@ asks for a new file. This path is described, not tested with another engine.
   spoken again).
 - `build/`: figures, values, screenshots. Rewritten by every build.
 - `media/manifest.js`: the sentence files and lengths. Rewritten by every build; the
-  page reports it when it does not match the slides ("Narration out of date").
+  page reports it when it does not match the slides ("Narration out of date"). A page
+  rendered without one (`quarto render` before the first build) runs silently, each
+  sentence lasting its words at 155 a minute, and says "no narration audio".
 - `~/.cache/kokoro/` (`KOKORO_DIR`): the voice model, 340 MB, downloaded once.
 
 ## When something fails
 
+- **"audio not found — running silently"** in the bar: the page was opened without
+  the `media/audio/` it was built with (`embed: false`). Ship the folder with the page.
 - **"Narration out of date" on the start overlay**: the slides were rendered without
   `narrate.py` (for example by `quarto preview`) after the narration changed. Run the
   build.

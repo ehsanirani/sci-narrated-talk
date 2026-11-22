@@ -32,10 +32,11 @@ Ask only for what the project does not already answer.
 - **Theme**: the one the talk opens in: `light` (default), `dark`, `paper`, `sci-talk`,
   `sea`, `journal`, `chalk`, `midnight`, `contrast`, or colours of the user's own. The
   look is the videos' frame and the themes are the same nine as `sci-video-talk`. All
-  of them travel in the page; the viewer switches with the Y key at any moment, and
-  slides, drawn figures and font follow.
+  of them travel in the page; the viewer switches with the Y key or in the settings
+  (`,`) at any moment, and slides, drawn figures and font follow.
 - **One file or a folder**: one `talk.html` with the speech inside (default), or the
   speech beside the page (`narrate: {embed: false}`) for a long talk or one with clips.
+  A page that has lost its `media/` still plays, silently, at the talk's pace.
 
 ## Start
 
@@ -183,8 +184,9 @@ The rules of a talk nobody can interrupt, as in `sci-video-talk`:
 ## Report back
 
 The path of `talk.html` and its size; length, slide and sentence count; the voice; what
-the check said; how the viewer steers it (space, arrows, T for the outline, `?` for the
-rest); and plainly whether anyone has listened to the audio. The check proves that the
+the check said; how the viewer steers it (P plays, space steps, so the same page can
+be presented by hand or with a clicker; arrows, T for the outline, `,` for the settings,
+which the browser remembers, `?` for the rest); and plainly whether anyone has listened to the audio. The check proves that the
 talk runs, not that the voice is pleasant or a name sounds right.
 
 Keep the talk's `README.md` and `build.sh` true (packages, anything the talk needs

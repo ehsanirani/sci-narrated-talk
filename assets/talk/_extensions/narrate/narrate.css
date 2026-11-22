@@ -36,12 +36,16 @@ body.nar-idle #nar-bar { opacity: 0; pointer-events: none; }
 #nar-bar button[aria-pressed="true"] { background: rgb(255 255 255 / 22%); border-color: #fff; }
 #nar-bar #nar-play { border: 0; font-size: 17px; width: 34px; padding: 2px 0; }
 #nar-time, #nar-num { font-variant-numeric: tabular-nums; }
+#nar-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #ffb4a0; }
+#nar-note:empty { display: none; }
+#nar-bar button:disabled { opacity: .45; cursor: default; border-color: rgb(255 255 255 / 35%); }
 /* each button prints its key; hidden (H), the bar is only its own show button, which fades when the mouse rests */
 #nar-bar kbd { margin-left: 5px; padding: 0 4px; border: 1px solid rgb(255 255 255 / 30%); border-radius: 3px;
   font: 10px ui-monospace, monospace; opacity: .75; }
 #nar-bar .row > kbd { margin-left: -6px; }
 @media (max-width: 860px) { #nar-bar kbd { display: none; } }
-@media (max-width: 560px) { #nar-theme { display: none !important; } }
+/* a phone: no keys to list, the frame has the slide number, the settings have the themes; the rest must fit */
+@media (max-width: 560px) { #nar-theme, #nar-helpb, #nar-num { display: none !important; } #nar-bar { padding-inline: 8px; } #nar-bar .row { gap: 6px; } }
 #nar-hide span::before { content: "▾"; }
 body.nar-hidden #nar-hide span::before { content: "▴"; }
 body.nar-hidden #nar-tl, body.nar-hidden #nar-bar .row > :not(#nar-hide) { display: none; }
@@ -86,8 +90,9 @@ body.nar-help #nar-help { display: flex; }
 
 #nar-start { position: fixed; inset: 0; z-index: 80; background: #000c; color: #fff; display: flex; align-items: center;
   justify-content: center; text-align: center; font: 28px system-ui, sans-serif; cursor: pointer; }
+#nar-start span { display: block; margin-top: 10px; font-size: 17px; opacity: .75; }
 #nar-start small { display: block; margin-top: 14px; max-width: 34em; font-size: 16px; color: #ffb4a0; }
-body.nar-shot #nar-bar, body.nar-shot #nar-out, body.nar-shot #nar-help, body.nar-shot #nar-start,
+body.nar-shot #nar-bar, body.nar-shot #nar-out, body.nar-shot #nar-help, body.nar-shot #nar-start, body.nar-shot #nar-set,
 body.nar-fast #nar-start { display: none !important; }
 body.nar-shot:not(.nar-fx) .reveal *, body.nar-shot:not(.nar-fx) .reveal *::before { transition: none !important; animation: none !important; }
 /* a recording (record.py) photographs the page with its clips black, and once more with clips white: the difference is
@@ -136,3 +141,37 @@ body.nar-captions #nar-cap { display: block; }
 #nar-raw:empty { display: none; }
 #nar-help button { font: inherit; padding: 3px 10px; border: 1px solid #c7ccd4; border-radius: 4px; background: #f5f6f8; color: inherit; cursor: pointer; }
 #nar-bar button:focus-visible, #nar-help button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* settings: a modal dialog in the talk's theme; each theme's swatch is drawn in that theme's own values */
+#nar-set { width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; margin: auto; padding: 0;
+  border: 1px solid var(--light, #d9dde3); border-radius: 8px; background: var(--bg, #fff); color: var(--ink, #1d2433);
+  font: 14px/1.35 system-ui, sans-serif; box-shadow: 0 8px 30px rgb(0 0 0 / 35%); overflow: auto; }
+#nar-set::backdrop { background: rgb(0 0 0 / 35%); }
+#nar-set form { padding: 0 16px 14px; }
+#nar-set .s-top { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 8px; font-weight: 600;
+  border-bottom: 1px solid var(--light, #d9dde3); }
+#nar-set .s-top button { font: 20px/1 system-ui; border: 0; background: none; color: var(--muted, #6b7280); cursor: pointer; }
+#nar-set fieldset { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
+#nar-set legend { padding: 0; margin-bottom: 4px; font-weight: 600; }
+#nar-set label { display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer; }
+#nar-set input { margin: 0; accent-color: var(--accent, #e8663d); }
+#nar-set kbd { padding: 0 4px; border: 1px solid var(--light, #d9dde3); border-radius: 3px; background: none; color: var(--muted, #6b7280);
+  font: 11px ui-monospace, monospace; }
+#nar-set em { font-style: normal; color: var(--muted, #6b7280); }
+#nar-set .s-row { display: flex; flex-wrap: wrap; gap: 2px 16px; }
+#nar-set .s-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+#nar-set .s-themes label { position: relative; flex-direction: column; align-items: stretch; gap: 3px; font-size: 12px;
+  color: var(--muted, #6b7280); text-align: center; }
+#nar-set .s-themes input { position: absolute; opacity: 0; }
+#nar-set .s-themes b { display: block; height: 42px; padding: 4px 6px 0; box-sizing: border-box; border: 1px solid; border-radius: 5px;
+  font-size: 17px; font-weight: 600; text-align: left; }
+#nar-set .s-themes i { display: inline-block; width: 22%; height: 5px; margin: 5px 3% 0 0; border-radius: 2px; vertical-align: top; }
+#nar-set .s-themes i:first-of-type { display: block; width: auto; height: 3px; margin: 2px 0 0; }
+#nar-set .s-themes input:checked + b { box-shadow: 0 0 0 2px var(--bg, #fff), 0 0 0 4px var(--accent, #e8663d); }
+#nar-set .s-themes input:checked ~ * { color: var(--ink, #1d2433); }
+#nar-set .s-themes input:focus-visible + b { outline: 2px solid var(--ink, #1d2433); outline-offset: 4px; }
+#nar-set #nar-link { width: 100%; box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--light, #d9dde3); border-radius: 4px;
+  background: color-mix(in srgb, var(--ink, #1d2433) 5%, var(--bg, #fff)); color: var(--ink, #1d2433); font: 12px ui-monospace, monospace; }
+#nar-set p { margin: 14px 0 0; color: var(--muted, #6b7280); font-size: 13px; }
+#nar-set p button { margin-top: 6px; font: inherit; padding: 3px 10px; border: 1px solid var(--light, #d9dde3); border-radius: 4px;
+  background: none; color: var(--ink, #1d2433); cursor: pointer; }

@@ -130,21 +130,42 @@ and labels, the bullets, the note and the footer sit within 3 px of the video fr
 
 | key | does | | mouse | does |
 |---|---|---|---|---|
-| space | play / pause | | timeline | click a slide to jump to it |
-| ← → | previous / next slide | | outline | click a line to play from there |
-| ↑ ↓ | previous / next sentence | | Alt+click | replay the sentence that introduced the element |
-| C | captions | | Ctrl+click | zoom in and out |
-| T | outline | | click, drag | select text |
+| P | play / pause | | timeline | click a slide to jump to it |
+| space, Enter, ↓, PgDn | next step: the next sentence, after the last one the next slide | | outline | click a line to play from there |
+| Backspace, ↑, PgUp | previous step | | Alt+click | replay the sentence that introduced the element |
+| ← → | previous / next slide | | Ctrl+click | zoom in and out |
+| C | captions | | click, drag | select text |
+| T | outline | | | |
 | M | voice on / off | | | |
 | A | auto-advance on / off | | | |
 | Y | next theme | | | |
 | X | hide / show the bar | | | |
 | # | slide number on / off | | | |
+| , | settings | | | |
 | R, then a key | that key as reveal.js has it (R ? its keys, R M its menu) | | | |
 | ? | help | | | |
 
 - The bar lies over the foot of the slide and fades while the talk plays and the mouse
   rests. Each button prints its key.
+- Space steps, it does not play: P (or a click on the start screen) plays. Stepping
+  while the talk plays keeps it playing; a step taken without playing shows that step
+  complete (its line drawn, all its pointers, its clips running) without the voice, and
+  the bar fades as it does while playing. So the same page is a talk that tells itself
+  and a deck to present by hand, with the space bar or a presentation clicker
+  (PageDown, PageUp); the first step only lifts the start screen, and Shift+space steps
+  back. In the speaker view's own window the keys are reveal.js's: space, the arrows
+  and a clicker step the same way, but P there steps back and nothing plays the voice.
+- The settings panel (the gear, or `,`) holds the theme (a swatch per theme, drawn in
+  its own colours), voice, captions, auto-advance, the timeline's layout and the slide
+  number, and a link that opens the talk with the current settings. What the viewer
+  changes is remembered per page in the browser's local storage; a setting in the
+  address wins over a remembered one, which wins over the talk's own. Recordings,
+  screenshots, the build's check and the speaker view never read or write it.
+- Without its sound the talk still plays. A page opened without its `media/audio/`
+  (`embed: false`) notices the first missing file, says "audio not found — running
+  silently", and runs every sentence on its measured length, as with the voice off.
+  A page rendered without `media/manifest.js` does the same on lengths estimated at
+  155 words per minute.
 - The timeline has one segment per slide, as wide as the slide is long, grouped and
   labelled by section. In a narrow window it falls back to one segment per section, and
   on a phone to none.
@@ -172,7 +193,7 @@ are that skill's nine: `light` (default), `dark`, `paper`, `sci-talk`, `sea`,
 `narrate: theme:` in the front matter sets the theme the talk opens in, by name or as
 colours of your own on a base (`{base: light, accent: "#0b7285"}`). All of them travel
 in the page: the viewer goes to the next one with the Y key or the bar's theme button,
-at any moment and without interrupting the voice, and `?theme=dark` opens in one. The
+or picks one in the settings, at any moment and without interrupting the voice, and `?theme=dark` opens in one. The
 picture above is a single build.
 
 This works because a theme has no style rules. `theme/narrated-talk.scss` holds the
@@ -181,6 +202,46 @@ is the nine values behind those names: eight colours and the font. `figures.py` 
 with the same names (`C.blue`, `C.accent`), and the build writes them into each SVG as
 names instead of fixed colours, so text, equations and drawn figures change together.
 The fonts are carried inside the talk. Clips and pasted images keep their own colours.
+
+## Voices: the slides and the voice as separate layers (planned, 0.5.0 on)
+
+Status and steps: [`TODO.md`](TODO.md). Until 0.4.0 the voice is part of the page:
+the manifest (sentence files, their lengths, the themes) is rendered into `talk.html`,
+so changing the voice means rebuilding the page. The aim is one presentation that can
+be given with a synthetic voice, with your own voice, or with none (presented by hand),
+where a voice is added, swapped or removed after the slides are built.
+
+- **The slides** (`talk.html`) carry the slides, the narration text and the player,
+  and no voice. Built once, without speech synthesis. With no voice the page is a deck
+  to present by hand: no warning, no voice button; each step has a length estimated
+  from its words, so P can still run it by itself, silently, for a rehearsal.
+- **A voice** is a folder beside the page, `media/voices/<name>/`: its audio and a
+  `voice.js` that lists, per step, the file, where in it the step starts, its length,
+  and the text it was made for. The page finds the voices when it opens (as scripts,
+  so it works offline from `file://`), offers them in the settings ("none", a
+  synthetic voice, your recording; also in the address) and remembers the choice.
+  Switching recomputes the clock: timeline, outline times, clips.
+- **Matched per step.** A sentence edited after a voice was made has no audio in that
+  voice: it runs silently on its estimate, and the settings say how many steps the
+  voice lacks. Only those are synthesised or recorded again.
+- **Sending it:** the folder, or a single file with one voice inside (an export step;
+  until 0.4.0 this was `embed: true`).
+
+Two kinds of voice:
+
+| | scripted voice (synthetic, or you reading the text) | free voice (you speak freely) |
+|---|---|---|
+| audio | one file per sentence | one recording per slide |
+| clock | the length of each file, plus the talk's pauses | your cues: a step lasts until the next cue; your pauses are in the recording |
+| matched by | the sentence's text | the step's place, with its text kept to notice later edits |
+| captions | the script | off (or a transcript, if one is added) |
+| phrased pointers (`point="#b@phrase"`) | at the phrase | the step's pointers all show for the whole step |
+
+What you say in a free voice is up to you; the recording only needs to know when each
+step starts. The cues come from recording in the page while you present it by hand
+(each Space press is a cue), from tapping Space along an existing recording, or from a
+file of times (Audacity labels). A voice made by a speech engine of your own, or your
+own reading of the script, is a scripted voice: one file per sentence, imported.
 
 ## What is in the skill
 
@@ -223,7 +284,8 @@ sci-narrated-talk/
    own position (slide, fragment) is therefore always "sentence k of slide n", and the
    plugin only has to play the right audio file and advance. It compares each
    sentence's text with the manifest and says so on the start overlay when the page
-   was rendered with older narration.
+   was rendered with older narration. Without the manifest, or without the sentence
+   files, it plays on silently on the lengths it has.
 7. **Check.** `narrate.py` opens the page in headless Chromium with the network cut and
    `?fast` (no sound, 50 times the speed), and fails the build unless every sentence
    was reached in order, every equation is rendered, nothing reaches outside its slide,
@@ -266,7 +328,16 @@ On the starter talk and on variants of it, in headless Chromium on Linux:
   and font follow, the voice plays on, and the embedded fonts load with the network cut;
 - a custom accent, and a custom theme refused for low contrast;
 - the check failing on purpose: content hidden behind the author's own pause, and
-  narration changed after the last build.
+  narration changed after the last build;
+- 0.4.0's keys driven key by key (stepping from the start screen without the voice, P,
+  a focused button taking space and Enter), the settings panel (each control, kept in
+  step with the bar, Esc and clicks outside, no key reaching reveal.js while open),
+  remembered settings against the address and a reset, and nothing remembered under
+  `?rec`, `?shot`, `?fast` or `?receiver`;
+- the talk without `media/audio/` and without its manifest, played to the end on its
+  own: its 1:13 took 72 s, the line grew and the timeline moved with the clock, a pause
+  held halfway through a sentence and went on from there;
+- a recorded stretch and the `?shot` screenshots, byte for byte the same as 0.3.0's.
 
 The player itself (bar, timeline, outline, keys, zoom, speaker-view silence) was
 developed on a 22-slide, 15-minute research talk before it was generalised here.
@@ -274,7 +345,10 @@ developed on a 22-slide, 15-minute research talk before it was generalised here.
 ## Not tested, not built
 
 - **By ear.** Nobody has to have listened for the check to pass. Say so in a report.
-- **Other browsers.** Firefox, Safari and touch devices are untried.
+- **Other browsers.** Firefox was run headless (152, Linux; driven over Marionette):
+  keys, the settings panel and what it remembers, the voice, a missing audio folder.
+  Safari and touch devices are untried; the bar was only measured at phone widths in
+  Chromium.
 - **The speaker view as a real window.** Its previews were tested as pages, not as the
   pop-up reveal.js opens.
 - **A long talk as one file.** The starter is 6.8 MB, of which about 5.5 MB is the

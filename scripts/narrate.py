@@ -27,8 +27,10 @@ talk opens in; all of THEMES travel in the page and the viewer can switch betwee
 address). Figures drawn with `C` follow, because figure() writes the theme's colours into the SVG by name.
 switch: false locks the talk to its theme (for a talk whose clips, images or narration fix the colours).
 keys: the player's keys by action (play, next, prev, up, down, first, last, captions, outline, voice, auto, theme, hide,
-help, number, reveal); a letter renames one, false frees it.
-embed: the speech goes into talk.html (one file to send); false leaves it in media/audio/ beside the page.
+help, number, settings, reveal); a key or a list of keys ([n, PageDown]; "space" for the space bar) replaces an action's
+keys, false frees them.
+embed: the speech goes into talk.html (one file to send); false leaves it in media/audio/ beside the page (opened
+without them, the page runs silently on the sentences' measured lengths).
 An mp3 that already exists in media/audio/ under a sentence's name is used as it is, so a recorded voice or another
 speech engine can replace Kokoro file by file (`--script` prints the names).
 """
@@ -46,7 +48,7 @@ import types
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.3.0"  # of the skill; the player (narrate.js) carries the same number
+VERSION = "0.4.0"  # of the skill; the player (narrate.js) carries the same number
 WPM = 155  # spoken words per minute, pauses included
 LONG = 45  # words; a longer sentence is flagged
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
