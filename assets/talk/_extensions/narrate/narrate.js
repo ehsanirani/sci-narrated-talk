@@ -25,11 +25,13 @@
  *
  * Player: a bar over the bottom of the slide (fades when the mouse rests while playing or presented by hand) with a timeline (one segment per
  * slide, as wide as the slide is long; one per section when slides would be < 10 px; none on a phone), and an outline.
- * Keys: P play / pause; space, Enter, down, PageDown the next step (a sentence; after the last, the next slide);
- * Backspace, Shift+space, up, PageUp the step before; <- -> slide; C captions, T outline, M voice on/off, A auto-advance,
+ * Keys: P play / pause, and space while there is a voice; Enter, down, PageDown the next step (a sentence; after the
+ * last, the next slide), and space when there is no voice; Backspace, Shift+space (where space steps), up, PageUp the
+ * step before; <- -> slide; C captions, T outline, M voice on/off, A auto-advance,
  * Y next theme, X hide the bar, # slide number, "," settings, ? help. Before the start a click or P plays, and the first
  * step key only lifts the start screen. A step taken without playing shows complete (line drawn, every pointer, clips
- * running): that is how one presents the talk oneself, with space or a clicker (PageDown, PageUp).
+ * running): that is how one presents the talk oneself, with a clicker (PageDown, PageUp), Enter or the arrows, or space
+ * once the voice is none.
  * Nothing acts with Ctrl/Alt/Meta or in a text field, and space and Enter on a focused control are the control's. The
  * keys are handled before reveal.js and not entered in its table, so R and then a key gives that key to reveal.js and
  * its plugins (R ?: its list of keys, R M: its menu). window.TALK.keys renames (a key or a list) or frees (false) them.
@@ -52,7 +54,7 @@
 window.RevealNarrate = () => {
   let deck, T, N, slides, h = 0, k = 0, playing = false, auto = true, phase = 'idle', tok = 0, timer = null;
   let D, S0, TOTAL, groups, secOf, SEC, items = [], built = -1, idleT, theme, cues = [], raw = 0, rawT, DEF;
-  const VERSION = '0.5.0', ARC = new WeakMap(), WPM = 155;  // narrate.py's words per minute: a sentence without audio
+  const VERSION = '0.5.1', ARC = new WeakMap(), WPM = 155;  // narrate.py's words per minute: a sentence without audio
   // the voices found (name -> its voice.js, with map: text key -> {src, dur}), the one chosen ('none': a deck to present
   // by hand), how many worded steps it lacks, the text keys of the worded steps
   let VOX = Object.create(null), voice = 'none', miss = 0, KT = [], ready = false;
@@ -88,13 +90,14 @@ window.RevealNarrate = () => {
   const words = s => s.trim().replace(/\s+/g, ' ');
   const short = s => { const w = s.split(' '); return w.length > 11 ? w.slice(0, 10).join(' ') + ' …' : s; };
   const heading = e => e ? words([...e.childNodes].filter(n => !n.matches?.('.part, .eyebrow')).map(n => n.textContent).join('')) : '';
-  // the talk's keys: action -> keys (lower case, or the key's name); the manifest's keys: override them. Space steps,
-  // as a clicker's PageDown does, so that the talk can be presented by hand; P plays.
-  const KEYS = {play: 'p', next: 'ArrowRight', prev: 'ArrowLeft', down: [' ', 'Enter', 'ArrowDown', 'PageDown'],
+  // the talk's keys: action -> keys (lower case, or the key's name); the manifest's keys: override them. P plays; space
+  // plays too while there is a voice, as in a video player, and steps (as a clicker's PageDown does) when there is none,
+  // so that a deck without a voice is presented by hand with it: see keysOf().
+  const KEYS = {play: ['p', ' '], next: 'ArrowRight', prev: 'ArrowLeft', down: [' ', 'Enter', 'ArrowDown', 'PageDown'],
                 up: ['Backspace', 'ArrowUp', 'PageUp'], first: 'Home', last: 'End', captions: 'c', outline: 't', voice: 'm',
                 auto: 'a', theme: 'y', hide: 'x', help: '?', number: '#', settings: ',', reveal: 'r'};
   const HELP = [['play', 'play / pause'], ['down', 'next step: the next sentence, after the last one the next slide'],
-                ['up', 'previous step (Shift+space too)'], ['prev next', 'previous / next slide'], ['first last', 'first / last slide'],
+                ['up', 'previous step'], ['prev next', 'previous / next slide'], ['first last', 'first / last slide'],
                 ['captions', 'captions'], ['outline', 'outline'], ['voice', 'voice on / off; the talk keeps its pace'],
                 ['theme', 'next theme (colours and font)'], ['auto', 'auto-advance to the next slide on / off'],
                 ['hide', 'hide / show the bar'], ['number', 'slide number on / off'],
@@ -103,7 +106,13 @@ window.RevealNarrate = () => {
   const NAME = {' ': 'space', ArrowRight: '→', ArrowLeft: '←', ArrowDown: '↓', ArrowUp: '↑', PageDown: 'PgDn', PageUp: 'PgUp'};
   const key1 = x => (x = String(x), /^space$/i.test(x) ? ' ' : x.length === 1 ? x.toLowerCase() : x);  // as e.key gives it
   const keyName = x => NAME[x] || (x.length === 1 ? x.toUpperCase() : x);
-  const kbd = (a, all) => KEYS[a].slice(0, all ? 9 : 1).map(x => `<kbd>${keyName(x)}</kbd>`).join(' ');  // a button: its first key
+  // a key of both play and down (space, by default) plays when there is a voice, and steps when there is none
+  const keysOf = a => {
+    if (a !== 'play' && a !== 'down') return KEYS[a];
+    const mine = (a === 'play') === (voice !== 'none'), other = KEYS[a === 'play' ? 'down' : 'play'];
+    return KEYS[a].filter(x => mine || !other.includes(x));
+  };
+  const kbd = (a, all) => keysOf(a).slice(0, all ? 9 : 1).map(x => `<kbd>${keyName(x)}</kbd>`).join(' ');  // a button: its first key
   const titleOf = j => heading(slides[j].querySelector('h1, h2')) || SEC[j] || document.title;
 
   // ------------------------------------------------------------ sentences -> reveal fragments
@@ -224,7 +233,7 @@ window.RevealNarrate = () => {
   }
   function ui() {
     $('#nar-play').textContent = playing ? '❚❚' : '▶';
-    $('#nar-play').title = (playing ? 'pause' : 'play') + (KEYS.play[0] ? ` (${keyName(KEYS.play[0])})` : '');
+    $('#nar-play').title = (playing ? 'pause' : 'play') + (keysOf('play')[0] ? ` (${keyName(keysOf('play')[0])})` : '');
     body.classList.toggle('nar-playing', playing);
     wake();
   }
@@ -316,7 +325,8 @@ window.RevealNarrate = () => {
   }
   // The voices beside the page: index.js names the folders (a page cannot list one), and each folder's voice.js sets
   // window.VOICE. Loaded as scripts, one after another, since a page opened from file:// may not fetch files; a folder
-  // that is gone or does not load is absent. A one-file copy carries its voice inside and looks for no other.
+  // that is gone or does not load is absent. A one-file copy carries its voice inside and looks for no other; one
+  // without a voice carries {name: 'none'}, which take() leaves out, and so looks for none.
   const script = src => new Promise(r => {
     const e = document.createElement('script');
     e.onload = () => r(true); e.onerror = () => { e.remove(); r(false); }; e.src = src; document.head.append(e);
@@ -512,7 +522,7 @@ window.RevealNarrate = () => {
 
   // ------------------------------------------------------------ chrome
   function chrome() {
-    const TH = Object.entries(T.themes || {}), play = KEYS.play[0], step = KEYS.down[0];
+    const TH = Object.entries(T.themes || {});
     const box = (n, what) => `<label><input type="checkbox" name="${n}">${what}</label>`;
     document.body.insertAdjacentHTML('beforeend', `
 <div id="nar-bar"><div id="nar-tl"><div id="nar-labs"></div><div id="nar-segs"></div><div id="nar-tip"></div></div>
@@ -524,11 +534,7 @@ window.RevealNarrate = () => {
 <button id="nar-olb" title="outline" aria-label="outline" aria-pressed="false">☰${kbd('outline')}</button><button id="nar-gear" title="settings" aria-label="settings">⚙&#xFE0E;${kbd('settings')}</button><button id="nar-helpb" title="keys and mouse" aria-label="keys and mouse">?</button>
 <button id="nar-hide" title="hide / show the bar" aria-label="hide or show the bar"><span></span>${kbd('hide')}</button></div></div>
 <div id="nar-out"></div><div id="nar-raw"></div>
-<div id="nar-help"><div class="box"><h3>Keys</h3><table>
-${HELP.filter(([a]) => a.split(' ').some(x => KEYS[x].length)).map(([a, d]) => `<tr><td>${a.split(' ').map(x => kbd(x, 1)).join(' ')}</td><td>${d}</td></tr>`).join('')}
-</table><p>${play && step ? `To present the talk yourself, step with ${kbd('down')} or a clicker and leave ${kbd('play')} alone: the voice
-stays off. ` : ''}${KEYS.reveal.length ? `Every other key is reveal.js's own (F fullscreen, O overview, S speaker view, …). ${kbd('reveal')} and then a key gives
-that key to reveal.js even where this talk uses it: ${kbd('reveal')} <kbd>?</kbd> shows reveal.js's own list of keys, ${kbd('reveal')} <kbd>M</kbd> its menu.` : ''}</p>
+<div id="nar-help"><div class="box"><h3>Keys</h3><table id="nar-keys"></table><p id="nar-hint"></p>
 <p><button id="nar-rkeys">reveal.js keys</button> <button id="nar-rmenu">reveal.js menu</button></p>
 <h3>Mouse</h3><table><tr><td>timeline</td><td>click a slide to jump to it; inside the current slide, to the sentence under the pointer</td></tr>
 <tr><td>outline</td><td>click a line to play from there; click a section to open it</td></tr>
@@ -601,8 +607,15 @@ ${box('auto', `go on to the next slide by itself ${kbd('auto')}`)}${box('num', `
 
   // the voice's button, the note in the bar and the start screen. With no voice the talk is a deck to present by hand:
   // no button, no warning, and the start screen says how to step, and that P runs it silently
+  // The help's keys follow too: a key of both play and down moves between them with the voice.
   function voiceUI() {
-    const b = $('#nar-voice'), play = KEYS.play[0], step = KEYS.down[0], P = play ? ` or press ${keyName(play)}` : '';
+    const b = $('#nar-voice'), play = keysOf('play')[0], step = keysOf('down')[0], P = play ? ` or press ${keyName(play)}` : '';
+    const back = keysOf('down').includes(' ') ? ' (Shift+space too)' : '', both = KEYS.play.find(x => KEYS.down.includes(x));
+    $('#nar-keys').innerHTML = HELP.filter(([a]) => a.split(' ').some(x => keysOf(x).length))
+      .map(([a, d]) => `<tr><td>${a.split(' ').map(x => kbd(x, 1)).join(' ')}</td><td>${d}${a === 'up' ? back : ''}</td></tr>`).join('');
+    $('#nar-hint').innerHTML = (play && step ? `To present the talk yourself, step with ${kbd('down')} or a clicker and leave ${kbd('play')} alone: the voice
+stays off${both && voice !== 'none' ? `; with no voice (in the settings) ${keyName(both)} steps too` : ''}. ` : '') + (KEYS.reveal.length ? `Every other key is reveal.js's own (F fullscreen, O overview, S speaker view, …). ${kbd('reveal')} and then a key gives
+that key to reveal.js even where this talk uses it: ${kbd('reveal')} <kbd>?</kbd> shows reveal.js's own list of keys, ${kbd('reveal')} <kbd>M</kbd> its menu.` : '');
     b.style.display = voice === 'none' ? 'none' : '';
     b.disabled = !!lost; b.title = lost || 'voice: off, the talk runs on silently at the same pace';
     b.setAttribute('aria-pressed', !audio.muted && !lost);
@@ -726,7 +739,7 @@ ${box('auto', `go on to the next slide by itself ${kbd('auto')}`)}${box('num', `
       if (raw) return key === 'Shift' || key === 'CapsLock' || unraw();  // after the prefix: this key is reveal.js's (R ? takes Shift)
       if (menu()?.isOpen?.() || deck.isOverview()) return;      // their own keys while they show
       // Shift+space steps back, as in reveal.js and the browser, where space steps
-      const act = key === ' ' && e.shiftKey && KEYS.down.includes(' ') ? 'up' : Object.keys(ACT).find(x => KEYS[x].includes(key));
+      const act = key === ' ' && e.shiftKey && keysOf('down').includes(' ') ? 'up' : Object.keys(ACT).find(x => keysOf(x).includes(key));
       if (!act) return;
       e.preventDefault(); e.stopImmediatePropagation();
       const idle = body.classList.contains('nar-idle');

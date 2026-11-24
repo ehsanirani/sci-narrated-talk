@@ -6,7 +6,7 @@ overwrites it.
 
 The slides and the voice are separate. `talk.html` is the slides; each voice is a folder beside it in
 `media/voices/`. The page finds the voices when it opens and offers them in its settings (`,`), with "none" for
-presenting by hand. Send the page together with `media/`, or one file with one voice inside (`--bundle`).
+presenting by hand. Send the page together with `media/`, or a one-file copy: `--bundle=voice`, `--bundle=clips` or `--bundle=both`, by what goes inside.
 
 | file | what it is | edit? |
 |---|---|---|
@@ -25,7 +25,7 @@ sh build.sh --no-voice          # the slides only, nothing spoken
 sh build.sh --script            # only print the narration with its timing and recording names; builds nothing
 sh build.sh --shots             # also a picture of every slide in build/shots/
 sh build.sh --voice=bm_george   # add another synthetic voice (--speed=1.2 for another pace); the slides stay as they are
-sh build.sh --bundle=af_heart   # talk-af_heart.html: one file with that voice inside
+sh build.sh --bundle=both       # talk-af_heart.html: one file with the voice and the clips inside (voice: the voice only; clips: the clips, no voice)
 ```
 
 Needs `uv`, `quarto` and `chromium` (the check; `--no-check` skips it). Only sentences whose wording, voice or

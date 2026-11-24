@@ -5,6 +5,7 @@ pagetitle: "How far does a random walker get?"
 # spoken: how to say what the speech engine misreads; captions keep the text.
 # theme: the one the talk opens in: light, dark, paper, sci-talk, sea, journal, chalk, midnight, contrast, or
 # {base: light, accent: "#0b7285"}. The viewer can switch between all of them with the Y key.
+# embed: voice, clips or both: every build also writes a one-file copy with the voice, the clips or both inside.
 narrate:
   voice: af_heart
   speed: 1.0
@@ -32,7 +33,7 @@ format:
     transition-speed: fast
     html-math-method: katex
     # Equations and figures go into talk.html, which works offline; the voices stay beside it, in media/voices/
-    # (sh build.sh --bundle=NAME writes one file with a voice inside).
+    # (sh build.sh --bundle=voice, clips or both writes a one-file copy with that inside).
     self-contained-math: true
     embed-resources: true
     revealjs-plugins: [narrate]

@@ -272,6 +272,9 @@ another colour.
   pointed at as a whole, but not part by part.
 - With clips, keep `embed-resources: true` and mark the clips `data-external="1"`:
   then the equations' KaTeX stays inside the page and only the clips are files.
+- **One file with the clips inside**: `sh build.sh --bundle=both`, or `--bundle=clips`
+  for one without a voice (see Voices).
+  `talk.html` keeps its clips as files, which `record.py` needs.
 
 ## Front matter
 
@@ -286,6 +289,7 @@ narrate:
   tail: 1.0              # after the last sentence, before the next slide
   switch: true           # false: the viewer cannot change the theme (see Themes)
   keys: {theme: false}   # the player's keys by action: a key or a list replaces its keys, false frees them
+  embed: both            # every build also writes a one-file copy: voice, clips or both (see below)
   theme: light           # see Themes
   spoken:                # written: spoken; changes the speech, not the captions
     "Péclet": "Pay-clay"
@@ -314,10 +318,13 @@ voice folder and speaks every sentence for it; the old folder stays and stays on
 in the page until it is deleted. The theme is laid out for the 1920 x 1080 canvas; sizes
 on a slide are in `em`, where 1em is the body text.
 
-`embed:` belongs to 0.4.0, when the voice was inside `talk.html`. Talks that still have
-it build unchanged: `embed: true` also writes the one-file copy with the talk's voice
-(`talk-<voice>.html`, as `--bundle` does), and `embed: false` changes nothing, since a
-voice is now always a folder beside the page. Note the old default: a 0.4.0 talk with no
+`embed: voice`, `clips` or `both` makes every build also write that one-file copy, as
+`--bundle=voice`, `clips` or `both` does (the table under Voices); `talk.html` and
+`media/` are built as always. Another word stops the build, and so does `voice` or
+`both` in a talk with `voice: false`, which has no voice to put inside. Under
+`--no-voice` such a build writes no copy and says so. `embed: true` is `embed: voice`:
+it is 0.4.0's, when the voice was inside `talk.html`; `embed: false` changes nothing,
+since a voice is now always a folder beside the page. Note the old default: a 0.4.0 talk with no
 `embed:` at all got one file with the speech inside; it now gets a `talk.html` without a
 voice and its voice in `media/voices/`. Send the folder, or the `--bundle` copy (the
 build's last line says so).
@@ -326,8 +333,8 @@ build's last line says so).
 
 | key | does |
 |---|---|
-| P | play / pause |
-| space, Enter, ↓, PgDn | next step: the next sentence, after the last one the next slide |
+| P; space while there is a voice | play / pause |
+| Enter, ↓, PgDn; space when there is no voice | next step: the next sentence, after the last one the next slide |
 | Backspace, ↑, PgUp | previous step |
 | ← → | previous / next slide |
 | Home, End | first / last slide |
@@ -342,12 +349,15 @@ build's last line says so).
 | ? | the talk's keys and mouse actions |
 | R, then a key | that key as reveal.js defines it: R ? shows reveal.js's own list of keys, R M its menu |
 
-Space steps and P plays. A step taken without playing shows that stage complete
-without the voice (its `grow=` line drawn, every pointer of the sentence on, its clips
-running), so the page can be presented by hand: never press P, and step with the space
-bar or a presentation clicker (they send PageDown and PageUp); the bar fades as it
-does while playing. On the start screen the first step only lifts it, so the audience
-sees the title slide first. Shift+space steps back. Stepping while the talk plays
+P plays. Space plays too while there is a voice, as in a video player, and steps
+when there is none (a deck built without one, or the voice set to none in the
+settings); the help (`?`) shows which. A step taken without playing shows that stage
+complete without the voice (its `grow=` line drawn, every pointer of the sentence on,
+its clips running), so the page can be presented by hand: never press P, and step with
+a presentation clicker (it sends PageDown and PageUp), Enter or ↓, or with space once
+the voice is none; the bar fades as it does while playing. On the start screen the
+first step only lifts it, so the audience sees the title slide first. Shift+space
+steps back where space steps. Stepping while the talk plays
 keeps it playing. Space and Enter on a button reached with Tab press that button
 (Enter on a focused link follows it; space still steps). In the speaker view's own
 window (S) the keys are reveal.js's: space, the arrows and a clicker step the same
@@ -365,7 +375,9 @@ it. The help (`?`) has buttons for reveal.js's own list of keys and for its menu
 with Ctrl, Alt or Meta are left to the browser.
 
 `narrate: keys:` gives an action other keys or frees it: the action, then one key, a
-list of keys, or `false`. A key is a letter or the name the browser gives it (`Enter`,
+list of keys, or `false`. A key given to both `play` and `down` (space, by default) plays when
+there is a voice and steps when there is none; `play: p` makes space only step, as
+before 0.5.1. A key is a letter or the name the browser gives it (`Enter`,
 `PageDown`, `ArrowUp`, `space`). The actions: `play`, `next`, `prev`, `up`, `down`,
 `first`, `last`, `captions`, `outline`, `voice`, `auto`, `theme`, `hide`, `number`,
 `settings`, `help`, `reveal`.
@@ -401,8 +413,8 @@ URL switches, for checks and links:
 | `talk.html?tl=sections` | the timeline's layout: `auto`, `slides`, `sections` or `none` |
 
 A browser plays no sound before the first click or key press, hence the start overlay:
-a click or P plays, a step key steps without the voice. With no voice the overlay says
-to step with space, and P runs the talk by itself, silently, on its estimated lengths
+a click, P or space plays, a step key steps without the voice. With no voice the
+overlay says to step with space, and P runs the talk by itself, silently, on its estimated lengths
 (a rehearsal); there is no voice button and no warning.
 
 ## Voices
@@ -436,7 +448,9 @@ sentences need speaking or recording again.
 | `sh build.sh --voice=bm_george` | add or complete a synthetic voice; `--speed=1.2`, `--lang=en-gb` for another pace or language |
 | `sh build.sh --script` | every sentence with its recording name (`03.2`: slide 3, step 2, as `talk.html#3.2`) |
 | `sh build.sh --import-voice=me` | bind the recordings in `media/voices/me/` to their sentences |
-| `sh build.sh --bundle=me` | `talk-me.html`: the page with that voice inside, one file to send |
+| `sh build.sh --bundle=voice:me` | `talk-me.html`: a one-file copy with that voice inside (`--bundle=voice`: the talk's own) |
+| `sh build.sh --bundle=both:me` | the same with the clips inside too |
+| `sh build.sh --bundle=clips` | `talk-none.html`: the clips inside and no voice, a deck to present by hand |
 
 `--voice`, `--import-voice` and `--bundle` leave `talk.html` as it is (byte for byte);
 build the slides first.
@@ -473,10 +487,27 @@ recorded voice has no `.gitignore` (an import removes one that a mistaken `--voi
 left): keep it in git, it cannot be made again. `--voice=` refuses a folder that holds
 recordings.
 
-**One file.** `--bundle=NAME` writes `talk-NAME.html` with that voice's audio inside, to
-send as one file that plays offline. It offers that voice and "none", and looks for no
-other. The folder version stays as it is.
+**One file.** `--bundle=WHAT` writes a copy of the page to send as one file that plays
+offline. What goes inside is always said; `--bundle` alone, or another word, stops and
+lists the three.
 
+| what goes inside | command | front matter | writes |
+|---|---|---|---|
+| the voice; the clips stay files beside it | `--bundle=voice` | `embed: voice` | `talk-<voice>.html` |
+| the clips, and no voice: a deck to present by hand | `--bundle=clips` | `embed: clips` | `talk-none.html` |
+| the voice and the clips: it needs nothing beside it | `--bundle=both` | `embed: both` | `talk-<voice>.html` |
+
+The voice is the talk's own (`narrate: voice:`); `--bundle=voice:NAME` and
+`--bundle=both:NAME` take the voice of `media/voices/NAME/` instead. A copy with a voice
+offers that voice and "none", and looks for no other; the `clips` copy looks for none,
+even beside `media/voices/`. The folder version stays as it is. Clips that stay files
+beside the `voice` copy are named by the build, to be sent along at the same paths.
+Inside, each video, sound and image the page shows from a file beside it is a `data:`
+URL: the copy grows by 4/3 of the clips' size, a clip shown on two slides goes in
+twice, and Firefox opens no `data:` URL over 32 MB (a clip of 24 MB; Chromium's limit
+is 512 MB): the build warns of such a clip. `voice` and `both` write the same name, so
+the later one replaces the earlier. Record (`record.py`) from `talk.html`, not from a
+copy. `narrate: embed:` (see Front matter) has every build write its copy.
 **`voice.js`**, written by `narrate.py`:
 
 ```js

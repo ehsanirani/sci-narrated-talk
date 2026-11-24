@@ -22,7 +22,12 @@ The steps of a build, in order:
                        --speed=X and --lang=L; its folder is NAME, NAME-1.2 at speed 1.2, NAME-1.2-en-gb ...
   --import-voice=NAME  bind the recordings in media/voices/NAME/ (03.2.wav, .mp3, .ogg or .flac, named as --script
                        lists them) to their sentences: your own reading of the script, or another engine's
-  --bundle=NAME        write talk-NAME.html: the page with the voice NAME inside, one file that plays offline
+  --bundle=WHAT        write a one-file copy of the page, with WHAT inside (say which: there is no default):
+                         voice   talk-NAME.html: the talk's own voice inside; its clips stay files beside it
+                         clips   talk-none.html: the clips inside (every video, sound and image the page shows
+                                 from a file beside it) and no voice: a deck to present by hand, which looks for none
+                         both    talk-NAME.html: the voice and the clips inside; it needs nothing beside it
+                       voice:NAME, both:NAME: with the voice of media/voices/NAME/ instead of the talk's own
   --shots              after the build: a screenshot of every slide's last stage in build/shots/ (contact sheets with pillow)
   --shots=all          ... and of every sentence of every slide (build/shots/all/NN-K.png)
   --size=WxH           the size of the screenshots (default 1280x720)
@@ -44,12 +49,14 @@ switch: false locks the talk to its theme (for a talk whose clips, images or nar
 keys: the player's keys by action (play, next, prev, up, down, first, last, captions, outline, voice, auto, theme, hide,
 help, number, settings, reveal); a key or a list of keys ([n, PageDown]; "space" for the space bar) replaces an action's
 keys, false frees them.
-embed: true (from 0.4.0, when the voice was inside talk.html) also writes the one-file copy, as --bundle does.
+embed: voice, clips or both: every build also writes that one-file copy, as --bundle=WHAT does (true: voice, as in
+0.4.0, when the voice was inside talk.html).
 """
 
 import base64
 import hashlib
 import json
+import mimetypes
 import os
 import re
 import runpy
@@ -57,10 +64,11 @@ import shutil
 import subprocess
 import sys
 import types
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.5.0"  # of the skill; the player (narrate.js) carries the same number
+VERSION = "0.5.1"  # of the skill; the player (narrate.js) carries the same number
 WPM = 155  # spoken words per minute, pauses included
 LONG = 45  # words; a longer sentence is flagged
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
@@ -324,6 +332,11 @@ def settings(meta):
              keys={}) | (meta.get("narrate") or {})
     if c["voice"] in (None, "none"):  # (`voice: none` in YAML is the word, not null)
         c["voice"] = False
+    c["embed"] = "voice" if c.get("embed") is True else c.get("embed") or None
+    if c["embed"] not in (None, *INSIDE):
+        sys.exit(f"narrate: embed: {c['embed']!r}: say what goes into the one-file copy: {', '.join(INSIDE)}")
+    if c["embed"] in ("voice", "both") and not c["voice"]:
+        sys.exit(f"narrate: embed: {c['embed']} needs a voice, and voice: is false: use embed: clips, or give the talk a voice")
     c["speed"] = float(c["speed"])  # `speed: 1` and --speed=1 must name the same files (0.4.0's starter wrote 1.0)
     if c["voice"]:
         c.setdefault("lang", LANG.get(c["voice"][0], "en-us"))
@@ -510,20 +523,57 @@ def import_voice(name, steps):
           + (f"\n  not used: {', '.join(unused)} (earlier takes, or sentences no longer in the talk)" if unused else ""))
 
 
-def bundle(name, html):
+def inline(page, base, put):
+    """The files the page shows from beside it (a clip: <video src=... data-external="1">), as (page, [files]); with
+    `put` each goes into the page as a data: URL."""
+    found = []
+
+    def attr(m):
+        ref, _, frag = m.group(2).partition("#")  # (run.mp4#t=5 keeps its fragment)
+        f = base / urllib.parse.unquote(ref)
+        if re.match(r"[a-z][a-z0-9+.-]*:|//", ref) or not f.is_file():
+            return m.group(0)
+        found.append(f)
+        if not put:
+            return m.group(0)
+        # ponytail: a file shown twice goes in twice, and Firefox opens no data: URL over 32 MB; blob URLs made by a
+        # script from one copy each would lift both, at the price of decoding them all when the page opens
+        return (f'{m.group(1)}="data:{mimetypes.guess_type(f.name)[0] or "application/octet-stream"};base64,'
+                f'{base64.b64encode(f.read_bytes()).decode()}{"#" + frag if frag else ""}"')
+
+    page = re.sub(r"<(?:video|audio|source|img|track)\b[^>]*>", lambda t: re.sub(r'\b(src|poster)="([^"]*)"', attr, t.group(0)), page)
+    return page, sorted(set(found))
+
+
+INSIDE = ("voice", "clips", "both")  # what a one-file copy can hold: --bundle=WHAT, narrate: embed: WHAT
+
+
+def bundle(name, html, clips=False):
     """talk-<name>.html: the page with the voice <name> inside (audio as data: URLs), one file that plays offline.
-    It looks for no other voice; the folder version stays as it is."""
+    It looks for no other voice; the folder version stays as it is. With `clips` the files the page shows from beside
+    it go inside too; without, they are named, since the one file needs them beside it. The name "none": no voice
+    inside, and the page looks for none (the player takes a VOICE without steps as that)."""
     d = VOICES / name
-    if not (d / "voice.js").exists():
+    if name != "none" and not (d / "voice.js").exists():
         sys.exit(f"no voice {name!r} to put in the page: {', '.join(voices()) or 'there is none'}")
-    v = read_voice(d) | {"name": name}
+    v = read_voice(d) | {"name": name} if name != "none" else {"name": "none", "steps": []}
     for s in v["steps"]:
         s["file"] = f"data:{AUDIO[Path(s['file']).suffix.lower()]};base64," + base64.b64encode((d / s["file"]).read_bytes()).decode()
     page, out = html.read_text(), html.with_name(f"{html.stem}-{name}.html")
     m = re.search(r"<head[^>]*>", page)  # before every script of the page: the player reads it when it starts
     js = json.dumps(v).replace("</", "<\\/")  # (a label must not close the script)
-    out.write_text(page[:m.end()] + f"\n<script>window.VOICE = {js};</script>" + page[m.end():])
-    print(f"one file: {out}  ({out.stat().st_size / 1e6:.1f} MB, voice {name})")
+    page, files = inline(page[:m.end()] + f"\n<script>window.VOICE = {js};</script>" + page[m.end():], html.parent, clips)
+    out.write_text(page)
+    rel = [os.path.relpath(f, html.parent) for f in files]
+    print(f"one file: {out}  ({out.stat().st_size / 1e6:.1f} MB, {'voice ' + name if name != 'none' else 'no voice'}"
+          + (f", and inside it {', '.join(rel[:4])}{', ...' if len(rel) > 4 else ''}" if clips and files else "") + ")")
+    if files and not clips:
+        print(f"  it still shows {len(files)} file{'s' * (len(files) > 1)} from beside it ({', '.join(rel[:4])}{', ...' if len(rel) > 4 else ''}): "
+              "to be sent along at the same paths (both, not voice, puts them inside)")
+    for f, n in zip(files, rel):
+        if clips and f.stat().st_size * 4 / 3 > 32e6:
+            print(f"  {n} is {f.stat().st_size / 1e6:.0f} MB: Firefox opens no data: URL over 32 MB (24 MB of file), Chromium none over 512 MB; "
+                  "a smaller clip, or the page sent with its folder, opens everywhere")
 
 
 # ---------------------------------------------------------------- checks in headless Chromium
@@ -684,11 +734,16 @@ def main():
     args, opts = options(sys.argv[1:])
     if unknown := set(opts) - FLAGS:
         sys.exit(f"unknown option {sorted(unknown)}\n{__doc__}")
+    if "--bundle" in opts:  # what goes inside is always said: voice, clips or both; and whose voice, if not the talk's
+        what, _, other = opts["--bundle"].partition(":")
+        if what not in INSIDE or (other and what == "clips") or (":" in opts["--bundle"] and not other):
+            sys.exit("--bundle: say what goes into the one-file copy: --bundle=voice, --bundle=clips or --bundle=both "
+                     "(with another voice than the talk's own: --bundle=voice:NAME, --bundle=both:NAME)")
     if empty := [k for k in VALUED - {"--size"} if k in opts and not opts[k]]:
         sys.exit(f"{empty[0]} needs a value: {empty[0]}=NAME")
     if bad := [k for k in ("--speed", "--lang") if k in opts and "--voice" not in opts]:
         sys.exit(f"{bad[0]} goes with --voice=NAME (the front matter sets the talk's own: narrate: speed:, lang:)")
-    if any((opts.get(k) or "").lower() == "none" for k in ("--voice", "--import-voice", "--bundle")):
+    if any((opts.get(k) or "").lower() == "none" for k in ("--voice", "--import-voice")) or opts.get("--bundle", "").lower().endswith(":none"):
         sys.exit("'none' is the page's name for no voice: give the voice another name")
     if "--version" in opts:
         return print(VERSION)
@@ -733,8 +788,11 @@ def main():
         if v := opts.get("--import-voice"):
             import_voice(v, steps)
         names = index()
-        if v := opts.get("--bundle"):
-            bundle(v, html)
+        if "--bundle" in opts:
+            own = c["voice"] and (c["voice"] if kind(VOICES / c["voice"]) == "recorded" else folder(c))
+            if what != "clips" and not (other or own):
+                sys.exit(f"--bundle={what}: the talk has no voice of its own (voice: false): name one, --bundle={what}:NAME")
+            bundle("none" if what == "clips" else other or own, html, what != "voice")
         for n in names:
             if n != opts.get("--import-voice") and (m := lacks(n, sentences)):  # (an import says which itself; None: unreadable, reported)
                 print(f"voice {n} lacks {len(m)} of {len(sentences)} sentences, which run silently with it")
@@ -765,10 +823,15 @@ def main():
         if "--shots" in opts:
             shots(html, log, opts["--shots"] == "all", opts.get("--size") or "1280x720")
     print(f"talk: {html}  ({html.stat().st_size / 1e6:.1f} MB, the slides; the voices are in {VOICES}/)")
-    if c.get("embed") is True and made:  # 0.4.0's one file with the speech inside
-        bundle(made, html)
-    elif made:  # (until 0.4.0 talk.html carried the speech by default; now it never does)
-        print(f"  {html.name} holds no voice: send it with {MEDIA}/, or one file with --bundle={made}")
+    e = c["embed"]  # a one-file copy: the voice inside (0.4.0's embed: true), the clips, or both
+    if e == "clips":
+        bundle("none", html, True)
+    elif e and made:
+        bundle(made, html, e == "both")
+    elif e:
+        print(f"  embed: {e}: no one-file copy written, since this build spoke no voice (--bundle={e} writes it from a voice made before)")
+    if made and e in (None, "clips"):  # (until 0.4.0 talk.html carried the speech by default; now it never does)
+        print(f"  {html.name} holds no voice: send it with {MEDIA}/, or one file with --bundle=voice (--bundle=both: its clips inside too)")
 
 
 if __name__ == "__main__":

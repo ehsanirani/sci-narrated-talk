@@ -23,6 +23,9 @@ the format and the commands in `references/authoring.md`, Voices.
 - [x] Steps a voice lacks (narration edited later) run silently on their estimate; the
       settings and the build say how many.
 - [x] Single-file export with one voice inside: `--bundle=NAME` (and `embed: true`).
+- [x] One-file copies by what goes inside, always said: `--bundle=voice | clips | both`
+      (`voice:NAME`, `both:NAME` for another voice) and `embed: voice | clips | both` (0.5.1);
+      0.5.0's `--bundle=NAME` is `--bundle=voice:NAME`.
 - [x] `record.py` takes the voice to record with (`--voice=NAME`) and refuses "none".
 - [x] The `voice.js` format holds a step's start inside its file (`at`), so phase 1b
       fits without changing it.

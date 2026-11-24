@@ -2,8 +2,8 @@
 
 A scientific talk that tells itself: a Quarto + reveal.js deck in which a synthetic
 voice narrates every slide, sentence by sentence, while the slide builds. The result is
-an HTML page that opens offline, with its voices in a folder beside it (or one file with
-one voice inside). The viewer can let it run like a video, steer it like a deck, pick
+an HTML page that opens offline, with its voices in a folder beside it (or a one-file
+copy with the voice, the clips or both inside). The viewer can let it run like a video, steer it like a deck, pick
 another voice, or present it by hand with none.
 
 ![The starter talk playing, with the outline open](docs/player.png)
@@ -44,7 +44,7 @@ The copies need `-L` because the installed skill is a tree of read-only links in
 Nix store. The first build downloads the voice model (340 MB) to `~/.cache/kokoro/`.
 The starter is a four-slide talk about a random walk, the twin of the video skill's
 starter: 1.3 minutes; `talk.html` is 6.3 MB, its voice 0.5 MB, and the one-file copy
-with the voice inside (`--bundle`) 7.0 MB.
+with the voice inside (`--bundle=voice`) 7.0 MB.
 
 ## Recording a video
 
@@ -135,8 +135,8 @@ and labels, the bullets, the note and the footer sit within 3 px of the video fr
 
 | key | does | | mouse | does |
 |---|---|---|---|---|
-| P | play / pause | | timeline | click a slide to jump to it |
-| space, Enter, ↓, PgDn | next step: the next sentence, after the last one the next slide | | outline | click a line to play from there |
+| P; space with a voice | play / pause | | timeline | click a slide to jump to it |
+| Enter, ↓, PgDn; space with no voice | next step: the next sentence, after the last one the next slide | | outline | click a line to play from there |
 | Backspace, ↑, PgUp | previous step | | Alt+click | replay the sentence that introduced the element |
 | ← → | previous / next slide | | Ctrl+click | zoom in and out |
 | C | captions | | click, drag | select text |
@@ -152,13 +152,14 @@ and labels, the bullets, the note and the footer sit within 3 px of the video fr
 
 - The bar lies over the foot of the slide and fades while the talk plays and the mouse
   rests. Each button prints its key.
-- Space steps, it does not play: P (or a click on the start screen) plays. Stepping
-  while the talk plays keeps it playing; a step taken without playing shows that step
+- P (or a click on the start screen) plays. Space plays too while there is a voice,
+  as in a video player, and steps when there is none (built without one, or the voice
+  set to none in the settings). Stepping while the talk plays keeps it playing; a step taken without playing shows that step
   complete (its line drawn, all its pointers, its clips running) without the voice, and
   the bar fades as it does while playing. So the same page is a talk that tells itself
-  and a deck to present by hand, with the space bar or a presentation clicker
-  (PageDown, PageUp); the first step only lifts the start screen, and Shift+space steps
-  back. In the speaker view's own window the keys are reveal.js's: space, the arrows
+  and a deck to present by hand, with a presentation clicker (PageDown, PageUp), Enter
+  or ↓, or the space bar once the voice is none; the first step only lifts the start
+  screen, and Shift+space steps back where space steps. In the speaker view's own window the keys are reveal.js's: space, the arrows
   and a clicker step the same way, but P there steps back and nothing plays the voice.
 - The settings panel (the gear, or `,`) holds the theme (a swatch per theme, drawn in
   its own colours), the voice (none, or one of those beside the page), voice on/off,
@@ -244,8 +245,18 @@ details for authors: `references/authoring.md`, Voices.
   renames it with a hash of its content, so that a later recording never overwrites a
   bound one. A sentence inserted or edited later leaves the other recordings bound; the
   import names what to record.
-- **Sending it:** the page with `media/`, or one file with one voice inside:
-  `--bundle=NAME` writes `talk-NAME.html` (0.4.0's `embed: true` now does this).
+- **Sending it:** the page with `media/`, or a one-file copy. What goes into the copy
+  is always said, there is no default:
+
+| what goes inside | command | front matter | writes |
+|---|---|---|---|
+| the voice; the clips stay files beside it | `--bundle=voice` | `embed: voice` | `talk-<voice>.html` |
+| the clips, and no voice: a deck to present by hand | `--bundle=clips` | `embed: clips` | `talk-none.html` |
+| the voice and the clips: it needs nothing beside it | `--bundle=both` | `embed: both` | `talk-<voice>.html` |
+
+  `--bundle` makes the copy from the slides as they are built; `narrate: embed:` has
+  every build write it. The voice is the talk's own, or `--bundle=both:NAME`. `talk.html`
+  and `media/` stay as they are (0.4.0's `embed: true` is `embed: voice`).
 
 Planned: a free voice (phase 1b) and recording in the page (phase 2).
 
@@ -330,9 +341,11 @@ sci-narrated-talk/
    The frame of the clip for that instant is decoded from its file by ffmpeg and added
    in that proportion. The frames go to ffmpeg as they are made, with the sound built
    from the chosen voice's files at their starts on the talk's clock.
-9. **One file** (`--bundle=NAME`): the rendered page with a script put first in its
-   head that sets the voice, its files as `data:` URLs. The player takes that voice and
-   looks for no other.
+9. **One file** (`--bundle=voice`, `clips` or `both`): the rendered page with a script
+   put first in its head that sets the voice, its files as `data:` URLs (for `clips`, a
+   voice without steps). The player takes that voice and looks for no other. For
+   `clips` and `both`, every `src` and `poster` of a video, sound or image tag that
+   names a file beside the page becomes a `data:` URL of that file.
 
 ## Requirements
 
@@ -371,6 +384,25 @@ On the starter talk and on variants of it, in headless Chromium on Linux:
   run-to-run differences in pointer regions that `record.py` also shows between two runs
   of one version (see below).
 
+Space by the voice (0.5.1), on the starter in headless Chromium 149, keys dispatched
+one by one: with af_heart, space starts, pauses and plays again (Shift+space too), Enter
+and Backspace step; with `?narrator=none`, space lifts the start screen, steps, and
+Shift+space steps back, P runs it silently; the help, its hint and the start screen
+name the keys of each.
+
+One-file copies (0.5.1), on the starter with a 4 s clip added to its last slide.
+`--bundle=both`: the one file alone in an empty folder with the network cut showed the
+clip, played and sought it (headless Chromium 149), and drew it in a `?shot` screenshot
+(Firefox 152); it differs from the `--bundle=voice` copy only in the clip's `src`; that
+copy alone shows no clip, and its build names the file it needs. `--bundle=clips`: the
+copy shows the clip and offers no voice, alone and beside `media/voices/`. `--bundle`
+without a word, with a voice's name or with another word stops and lists the three;
+`both:af_heart` names the voice. `embed:` built with `true`, `clips` and `both`: the
+copies of the table; `both` under `--no-voice` wrote none and said so; `both` with
+`voice: false`, and any other word, stop the build. Not tried: a clip over Firefox's
+32 MB limit for a `data:` URL (the build warns), a talk with many clips, `<source>` and
+`poster`.
+
 Voices (0.5.0), on the starter, in headless Chromium 149 and Firefox 152:
 
 - the slides built without a voice: no synthesis, the check passes, the page opens as
@@ -393,7 +425,7 @@ Voices (0.5.0), on the starter, in headless Chromium 149 and Firefox 152:
 - a talk built with 0.4.0 (with its `media/audio/`), its copies replaced by 0.5.0 and
   built with no speech model available: all 12 files taken over, nothing spoken, the
   lengths those of 0.4.0's manifest; `embed: true` writing the one-file copy;
-- `--bundle`: one file, alone in an empty folder with the network cut, plays its voice
+- `--bundle` (0.5.0's `--bundle=NAME`, now `--bundle=voice`): one file, alone in an empty folder with the network cut, plays its voice
   (Chromium and Firefox) and looks for no other;
 - `record.py --voice=af_heart` on the 0.5.0 page against 0.4.0's `record.py` on the
   0.4.0 page of the same talk: sound and subtitles identical, frames identical in one

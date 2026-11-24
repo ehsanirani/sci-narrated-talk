@@ -42,8 +42,10 @@ Ask only for what the project does not already answer.
   look is the videos' frame and the themes are the same nine as `sci-video-talk`. All
   of them travel in the page; the viewer switches with the Y key or in the settings
   (`,`) at any moment, and slides, drawn figures and font follow.
-- **How it is sent**: `talk.html` with its `media/` folder (default), or one file with one
-  voice inside (`--bundle=NAME` writes `talk-NAME.html`). A page that has lost its
+- **How it is sent**: `talk.html` with its `media/` folder (default), or a one-file copy
+  whose content is always said: `--bundle=voice` (the voice inside, clips beside it),
+  `--bundle=clips` (the clips inside, no voice) or `--bundle=both` (nothing beside it);
+  `narrate: embed: voice | clips | both` has every build write it. A page that has lost its
   `media/` opens as slides to present by hand.
 
 ## Start
@@ -84,7 +86,9 @@ command out: a shell variable holding it does not split in zsh.
 | `NT --no-voice` | the build without speaking anything |
 | `NT --voice=bm_george` | add or complete a synthetic voice (`--speed=1.2`, `--lang=en-gb`), without rendering the slides |
 | `NT --import-voice=me` | bind recordings in `media/voices/me/` (named `03.2.wav`, as `--script` lists them) to their sentences |
-| `NT --bundle=af_heart` | `talk-af_heart.html`: the page with that voice inside, one file |
+| `NT --bundle=voice` | `talk-<voice>.html`: a one-file copy with the talk's voice inside (its clips stay files beside it) |
+| `NT --bundle=both` | the same with the clips inside too: one file that needs nothing beside it (`both:NAME`: another voice) |
+| `NT --bundle=clips` | `talk-none.html`: the clips inside and no voice, a deck to present by hand |
 | `NT --shots` | the build, then a screenshot of every slide's last stage and contact sheets in `build/shots/` |
 | `NT --shots=all --size=1920x1080` | also a screenshot of every sentence (`build/shots/all/`), at that size |
 | `NT --themes` | the build, with the check run in every theme the talk can be switched to |
@@ -201,8 +205,8 @@ The rules of a talk nobody can interrupt, as in `sci-video-talk`:
 ## Report back
 
 The path of `talk.html` and its size; length, slide and sentence count; the voices
-beside it and the steps each lacks; what the check said; how the viewer steers it (P plays, space steps, so the same page can
-be presented by hand or with a clicker; arrows, T for the outline, `,` for the settings,
+beside it and the steps each lacks; what the check said; how the viewer steers it (P or space plays; with no voice space steps, and a clicker,
+Enter or ↓ always step, so the same page can be presented by hand; arrows, T for the outline, `,` for the settings,
 which the browser remembers, `?` for the rest); and plainly whether anyone has listened to the audio. The check proves that the
 talk runs, not that the voice is pleasant or a name sounds right.
 
