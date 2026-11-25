@@ -15,8 +15,9 @@ contains, how the pieces fit, and what has and has not been tested.
 
 It needs [Claude Code](https://claude.com/claude-code), Git,
 [uv](https://docs.astral.sh/uv/) and [Quarto](https://quarto.org/docs/get-started/)
-1.4 or newer, and Chrome, Chromium or Edge for the build's check. On Windows uv and
-Quarto install with `winget install astral-sh.uv Posit.Quarto`.
+1.4 or newer, and Chrome, Chromium or Edge for the build's check. On Windows the
+three tools install with `winget install Git.Git astral-sh.uv Posit.Quarto` (Git for
+Windows brings Git Bash, in which the build script runs); open a new terminal after it.
 
 In Claude Code, on any system:
 
