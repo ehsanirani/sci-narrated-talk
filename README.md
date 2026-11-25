@@ -368,16 +368,25 @@ run on Windows, since they drive the browser through inherited pipes. Neither ma
 nor Windows has been tried.
 
 **Installing it.** The skill is this folder, public as
-[ehsanirani/sci-narrated-talk](https://github.com/ehsanirani/sci-narrated-talk). Clone
-it into Claude Code's skills folder and start Claude Code again; `git pull` there
-updates it.
+[ehsanirani/sci-narrated-talk](https://github.com/ehsanirani/sci-narrated-talk). In
+Claude Code, on any system:
+
+```
+/plugin marketplace add ehsanirani/sci-narrated-talk
+/plugin install sci-narrated-talk@sci-narrated-talk
+```
+
+`/plugin marketplace update sci-narrated-talk` fetches a newer version. The other way
+is a clone into the skills folder, updated with `git pull` (one way or the other, not
+both, or the skill is there twice):
 
 ```sh
 git clone https://github.com/ehsanirani/sci-narrated-talk ~/.claude/skills/sci-narrated-talk
 ```
 
-On Windows in PowerShell the folder is `"$HOME\.claude\skills\sci-narrated-talk"`.
-Then ask Claude for a narrated talk, or type `/sci-narrated-talk`.
+On Windows in PowerShell that folder is `"$HOME\.claude\skills\sci-narrated-talk"`.
+Start Claude Code again, then ask for a narrated talk, or type `/sci-narrated-talk`
+(installed as a plugin: `/sci-narrated-talk:sci-narrated-talk`).
 
 ## Tested
 
