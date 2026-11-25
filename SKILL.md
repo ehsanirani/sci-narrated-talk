@@ -33,8 +33,8 @@ Ask only for what the project does not already answer.
   155 spoken words per minute, pauses included.
 - **Where every number comes from**: a numbers file or generated values. Nothing is
   typed in from memory.
-- **Voice**: default `af_heart` (Kokoro; `--voices` lists them). For samples to choose
-  from, use `sci-video-talk`'s `--voices NAME ...`. More voices can sit beside the page
+- **Voice**: default `af_heart` (Kokoro; `--voices` lists them). To hear another, add
+  it beside the page (`--voice=NAME`) and pick it in the settings. More voices can sit beside the page
   (another Kokoro voice or speed, the author's own reading); `voice: false` builds slides
   to present by hand.
 - **Theme**: the one the talk opens in: `light` (default), `dark`, `paper`, `sci-talk`,
@@ -51,12 +51,19 @@ Ask only for what the project does not already answer.
 ## Start
 
 Put the talk where the project keeps talks (for example `presentations/<slug>/`). The
-skill's files are read-only links into the Nix store, so copy with `-L`:
+skill's files may be read-only links (an install by Nix), so copy what they point to
+and make the copy writable:
 
 ```sh
-cp -rL --no-preserve=mode <this skill>/assets/talk <dir>
-cp -L --no-preserve=mode <this skill>/scripts/narrate.py <this skill>/scripts/record.py <dir>/
+cp -rL <this skill>/assets/talk <dir>
+cp -L <this skill>/scripts/narrate.py <this skill>/scripts/record.py <dir>/
+chmod -R u+w <dir>
 ```
+
+The build needs `uv`, Quarto and, for the check, Chromium, Chrome or Edge (found on the
+PATH or where macOS and Windows install them; `CHROME=/path` names another). On Windows
+run it from Git Bash; `--shots` and `record.py` do not run there, so build without
+`--shots` and say that the slides were not looked at.
 
 That is a complete four-slide talk that builds as it stands: `talk.qmd` (slides and
 narration), `figures.py` (numbers and drawings), `_extensions/narrate/` (the player),
@@ -74,7 +81,7 @@ of different versions. Read `references/authoring.md` before writing the first s
 ## Commands
 
 `NT` stands for
-`uv run --no-project --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib --with pillow python narrate.py`
+`uv run --no-project --python ">=3.10" --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib --with pillow python narrate.py`
 (add `--with` for what `figures.py` imports, in `build.sh` too, which is the same
 command: `sh build.sh --shots`), run in the talk's directory. Write the
 command out: a shell variable holding it does not split in zsh.
@@ -105,10 +112,12 @@ an own reading: `references/authoring.md`, Voices.
 ## Recording a video
 
 `scripts/record.py` turns a built `talk.html` into an `.mp4`, so the talk is the single
-source of both forms. It needs ffmpeg as well as Chromium, and `narrate.py` beside it:
+source of both forms. It needs ffmpeg on the PATH (where it is missing and Nix is
+there: `nix shell nixpkgs#ffmpeg -c` before the command) as well as the browser, and
+`narrate.py` beside it; Linux and macOS only:
 
 ```sh
-nix shell nixpkgs#ffmpeg -c uv run --no-project --with soundfile --with numpy --with pillow \
+uv run --no-project --with soundfile --with numpy --with pillow \
     python record.py talk.html
 ```
 

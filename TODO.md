@@ -34,6 +34,10 @@ the format and the commands in `references/authoring.md`, Voices.
 
 Found on the way, not done:
 
+- [ ] Windows and macOS are untried (0.5.2 made the build ready for them: browser lookup,
+      UTF-8, `quarto.cmd`). On Windows `--shots` and `record.py` do not run: the browser
+      is driven through inherited pipes 3 and 4; `--remote-debugging-io-pipes` with
+      handles is the way.
 - [ ] `plain()` keeps a Markdown link's URL (`[a](url)`): the sentence is spoken with
       the URL and its text key differs from the page's, so the check fails (as 0.4.0's
       "Narration out of date" did).

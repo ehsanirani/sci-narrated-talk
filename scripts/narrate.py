@@ -1,6 +1,6 @@
 """Build a narrated talk from a Quarto deck (the sci-narrated-talk skill). Run inside the talk's directory:
 
-    uv run --no-project --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib python narrate.py [talk.qmd]
+    uv run --no-project --python ">=3.10" --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib python narrate.py [talk.qmd]
 
 The slides and the voice are separate layers. talk.html holds the slides, the narration's text and the player, and
 no voice; a voice is a folder beside it, media/voices/<name>/ (its audio and a voice.js), which the page finds when it
@@ -68,12 +68,13 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.5.1"  # of the skill; the player (narrate.js) carries the same number
+VERSION = "0.5.2"  # of the skill; the player (narrate.js) carries the same number
 WPM = 155  # spoken words per minute, pauses included
 LONG = 45  # words; a longer sentence is flagged
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 LANG = {"a": "en-us", "b": "en-gb", "e": "es", "f": "fr-fr", "h": "hi", "i": "it", "j": "ja", "p": "pt-br", "z": "cmn"}
 SAY = re.compile(r"^:::+ *(?:\{[^}\n]*\.say\b[^}\n]*\}|say) *\n(.*?)^:::+ *$", re.M | re.S)
+os.environ.setdefault("MPLBACKEND", "Agg")  # figures are drawn to files: no window toolkit, which macOS and Windows would pick
 BUILD, MEDIA = Path("build"), Path("media")
 VOICES = MEDIA / "voices"  # a folder per voice, each with its audio and voice.js; index.js names them
 RECORDING = re.compile(r"\d+\.\d+(-[0-9a-f]{6})?")  # a recording's name: its place (03.2), and once bound its hash
@@ -503,7 +504,7 @@ def import_voice(name, steps):
             print(f"  {p.name}: no sentence at {pos((n, k))} (see --script); left as it is")
             continue
         q = p.with_name(f"{pos((n, k))}-{hashlib.sha1(p.read_bytes()).hexdigest()[:6]}{p.suffix.lower()}")
-        p.rename(q)
+        p.replace(q)  # (replace: the same recording copied in again has this name already, which stops rename on Windows)
         if at[(n, k)] in bound:
             print(f"  {q.name} replaces {bound[at[(n, k)]]}, which stays in the folder unused")
         bound[at[(n, k)]] = q.name
@@ -538,13 +539,14 @@ def inline(page, base, put):
             return m.group(0)
         # ponytail: a file shown twice goes in twice, and Firefox opens no data: URL over 32 MB; blob URLs made by a
         # script from one copy each would lift both, at the price of decoding them all when the page opens
-        return (f'{m.group(1)}="data:{mimetypes.guess_type(f.name)[0] or "application/octet-stream"};base64,'
+        return (f'{m.group(1)}="data:{MIME.guess_type(f.name)[0] or mimetypes.guess_type(f.name)[0] or "application/octet-stream"};base64,'
                 f'{base64.b64encode(f.read_bytes()).decode()}{"#" + frag if frag else ""}"')
 
     page = re.sub(r"<(?:video|audio|source|img|track)\b[^>]*>", lambda t: re.sub(r'\b(src|poster)="([^"]*)"', attr, t.group(0)), page)
     return page, sorted(set(found))
 
 
+MIME = mimetypes.MimeTypes()  # Python's own table first: the module's functions put the Windows registry over it
 INSIDE = ("voice", "clips", "both")  # what a one-file copy can hold: --bundle=WHAT, narrate: embed: WHAT
 
 
@@ -577,11 +579,25 @@ def bundle(name, html, clips=False):
 
 
 # ---------------------------------------------------------------- checks in headless Chromium
-def chromium(*args, timeout=600):
-    exe = next((e for e in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable") if shutil.which(e)), None)
+# ponytail: Browser gets its pipes as inherited fds 3 and 4, which Windows has not; --remote-debugging-io-pipes with handles is the way
+NO_WINDOWS = "screenshots (--shots) and record.py do not run on Windows yet; the rest of the build does"
+
+
+def browser():
+    """Chromium, Chrome or Edge: $CHROME, else a name on the PATH, else where macOS and Windows install them."""
+    names = (os.environ.get("CHROME", ""), "chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "chrome", "msedge")
+    apps = [f"/Applications/{a}.app/Contents/MacOS/{a}" for a in ("Google Chrome", "Chromium", "Microsoft Edge")]
+    apps += [f"{os.environ[v]}/{a}" for v in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA") if v in os.environ
+             for a in ("Google/Chrome/Application/chrome.exe", "Microsoft/Edge/Application/msedge.exe")]
+    exe = next(filter(None, map(shutil.which, names)), None) or next(filter(os.path.isfile, apps), None)
     if not exe:
-        sys.exit("no chromium or google-chrome on the PATH: the check and the screenshots need one (or pass --no-check)")
-    return subprocess.run([exe, "--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
+        sys.exit("no Chromium, Chrome or Edge found (CHROME=/path/to/one names it): the check and the screenshots need one; "
+                 "--no-check builds without")
+    return exe
+
+
+def chromium(*args, timeout=600):
+    return subprocess.run([browser(), "--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
                            "--host-resolver-rules=MAP * ~NOTFOUND", *args], capture_output=True, text=True, timeout=timeout).stdout
 
 
@@ -636,9 +652,7 @@ class Browser:
         import fcntl
         import tempfile
 
-        exe = next((e for e in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable") if shutil.which(e)), None)
-        if not exe:
-            sys.exit("no chromium or google-chrome on the PATH: the screenshots need one")
+        exe = browser()
         fds = [fcntl.fcntl(f, fcntl.F_DUPFD, 10) for pair in (os.pipe(), os.pipe()) for f in pair]  # clear of 3 and 4
         (r1, w1, r2, w2), self.n, self.buf, self.dir = fds, 0, b"", tempfile.mkdtemp()
         self.w, self.r = w1, r2
@@ -745,6 +759,8 @@ def main():
         sys.exit(f"{bad[0]} goes with --voice=NAME (the front matter sets the talk's own: narrate: speed:, lang:)")
     if any((opts.get(k) or "").lower() == "none" for k in ("--voice", "--import-voice")) or opts.get("--bundle", "").lower().endswith(":none"):
         sys.exit("'none' is the page's name for no voice: give the voice another name")
+    if os.name == "nt" and "--shots" in opts:
+        sys.exit(NO_WINDOWS)
     if "--version" in opts:
         return print(VERSION)
     if "--voices" in opts:
@@ -754,6 +770,8 @@ def main():
     html, name = qmd.with_suffix(".html"), None
     layer = {"--voice", "--import-voice", "--bundle"} & set(opts)  # a voice, without rendering the slides
     if "--script" not in opts and not layer:
+        if not shutil.which("quarto"):  # said before the figures are drawn and the voice is spoken, not after
+            sys.exit("quarto is not on the PATH: the slides are rendered by Quarto 1.4 or newer (https://quarto.org/docs/get-started/)")
         c0 = settings(read(qmd, strict=False)[0])
         name = apply_theme(c0["theme"], Path("figures.py").exists(), c0["switch"])
         if Path("figures.py").exists():
@@ -813,7 +831,7 @@ def main():
     else:
         print(f"no voice spoken: about {est / 60:.1f} min at {WPM} words per minute; theme {name}", flush=True)
     index()
-    subprocess.run(["quarto", "render", qmd.name], check=True)
+    subprocess.run([shutil.which("quarto"), "render", qmd.name], check=True)  # (which: quarto.cmd on Windows)
     if "--no-check" not in opts or "--shots" in opts or "--themes" in opts:
         log = check(html, est, need=need)
         if "--themes" in opts:
@@ -835,4 +853,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if os.name == "nt" and not sys.flags.utf8_mode:  # Windows reads and writes text in its own code page otherwise
+        sys.exit(subprocess.run([sys.executable, "-X", "utf8", *sys.argv]).returncode)
     main()

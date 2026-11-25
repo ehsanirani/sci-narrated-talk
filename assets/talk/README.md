@@ -28,7 +28,8 @@ sh build.sh --voice=bm_george   # add another synthetic voice (--speed=1.2 for a
 sh build.sh --bundle=both       # talk-af_heart.html: one file with the voice and the clips inside (voice: the voice only; clips: the clips, no voice)
 ```
 
-Needs `uv`, `quarto` and `chromium` (the check; `--no-check` skips it). Only sentences whose wording, voice or
+Needs `uv`, `quarto` and Chromium, Chrome or Edge (the check; `--no-check` skips it). On Windows: from Git Bash,
+and without `--shots` and `record.py`, which do not run there. Only sentences whose wording, voice or
 speed changed are spoken again, so a second build takes seconds. Open `talk.html` in a browser; `?` lists the keys.
 
 ## Your own voice
@@ -43,7 +44,7 @@ import names the ones to record again. A step without a recording runs silently 
 ## Record a video
 
 ```sh
-nix shell nixpkgs#ffmpeg -c uv run --no-project --with soundfile --with numpy --with pillow python record.py talk.html
+uv run --no-project --with soundfile --with numpy --with pillow python record.py talk.html   # needs ffmpeg
 ```
 
 writes `talk.mp4` and `talk.srt` beside the page, with the voice the talk opens with (`--voice=NAME` for another,

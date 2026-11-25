@@ -32,16 +32,17 @@ an `.mp4` afterwards (Recording a video, below).
 
 ```sh
 skill=~/.claude/skills/sci-narrated-talk
-cp -rL --no-preserve=mode $skill/assets/talk mytalk
-cp -L --no-preserve=mode $skill/scripts/narrate.py mytalk/
+cp -rL $skill/assets/talk mytalk
+cp -L $skill/scripts/narrate.py mytalk/
+chmod -R u+w mytalk
 cd mytalk
-uv run --no-project --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib --with pillow \
+uv run --no-project --python ">=3.10" --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib --with pillow \
     python narrate.py --shots
-chromium talk.html
+# then open talk.html in a browser
 ```
 
-The copies need `-L` because the installed skill is a tree of read-only links into the
-Nix store. The first build downloads the voice model (340 MB) to `~/.cache/kokoro/`.
+The `-L` and the `chmod` are for an install by Nix, where the skill is a tree of
+read-only links into the store; elsewhere they do no harm. The first build downloads the voice model (340 MB) to `~/.cache/kokoro/`.
 The starter is a four-slide talk about a random walk, the twin of the video skill's
 starter: 1.3 minutes; `talk.html` is 6.3 MB, its voice 0.5 MB, and the one-file copy
 with the voice inside (`--bundle=voice`) 7.0 MB.
@@ -49,7 +50,7 @@ with the voice inside (`--bundle=voice`) 7.0 MB.
 ## Recording a video
 
 ```sh
-nix shell nixpkgs#ffmpeg -c uv run --no-project --with soundfile --with numpy --with pillow \
+uv run --no-project --with soundfile --with numpy --with pillow \
     python $skill/scripts/record.py talk.html
 ```
 
@@ -58,7 +59,7 @@ chapter per slide) and `talk.srt`, with the voice the talk opens with. Options:
 `--voice=NAME` (another of its voices; a talk with no voice is refused: it is a deck to
 present by hand), `--from=S --to=S` (a stretch, for a trial), `--theme=NAME`,
 `--size=1280x720`, `--fps=25`, `--crf=20`, `-o FILE`. `record.py` needs `narrate.py`
-beside it, ffmpeg and Chromium, and a page whose player is 0.3.0 or later (`--voice`:
+beside it, ffmpeg (with Nix: `nix shell nixpkgs#ffmpeg -c` before the command) and Chromium, and a page whose player is 0.3.0 or later (`--voice`:
 0.5.0). A sentence the voice lacks is silent in the video, on its estimated length.
 
 How long it takes: a 15-minute talk with 27 clips, 22,378 frames at 1920x1080, took
@@ -352,11 +353,31 @@ sci-narrated-talk/
 - `uv` (the Python packages are fetched per run: `kokoro-onnx`, `soundfile`, `pyyaml`,
   `matplotlib`, optionally `pillow` for contact sheets)
 - Quarto 1.4 or newer (built and tested with 1.10.19)
-- Chromium or Chrome on the PATH, for the check and the screenshots only
+- Chromium, Chrome or Edge, for the check and the screenshots only: found on the PATH or
+  where macOS and Windows install them; `CHROME=/path/to/one` names another
 - the theme's font installed on the build machine (Source Sans 3; IBM Plex Serif for
   `journal`); without it the talk falls back to the viewer's system font
 - no node, no network after the first download of the voice model; ffmpeg only for
   `record.py`
+
+**Platforms.** Linux is where it was built and tested. macOS should run all of it.
+On Windows the build, the voices, the check and the one-file copies are meant to work,
+from Git Bash (`sh build.sh`; Claude Code runs it there): the script finds Chrome or
+Edge, reads and writes UTF-8, and calls `quarto.cmd`. `--shots` and `record.py` do not
+run on Windows, since they drive the browser through inherited pipes. Neither macOS
+nor Windows has been tried.
+
+**Installing it.** The skill is this folder, public as
+[ehsanirani/sci-narrated-talk](https://github.com/ehsanirani/sci-narrated-talk). Clone
+it into Claude Code's skills folder and start Claude Code again; `git pull` there
+updates it.
+
+```sh
+git clone https://github.com/ehsanirani/sci-narrated-talk ~/.claude/skills/sci-narrated-talk
+```
+
+On Windows in PowerShell the folder is `"$HOME\.claude\skills\sci-narrated-talk"`.
+Then ask Claude for a narrated talk, or type `/sci-narrated-talk`.
 
 ## Tested
 
@@ -403,6 +424,11 @@ copies of the table; `both` under `--no-voice` wrote none and said so; `both` wi
 32 MB limit for a `data:` URL (the build warns), a talk with many clips, `<source>` and
 `poster`.
 
+Other platforms (0.5.2), on Linux only: the starter builds with `--shots` as before;
+the browser lookup was run with nothing on the PATH and a stand-in `msedge.exe` under
+`PROGRAMFILES(X86)`, and with `CHROME` set; the re-run in UTF-8 mode and the refusal of
+`--shots` were run with the Windows test forced. Nothing was run on Windows or macOS.
+
 Voices (0.5.0), on the starter, in headless Chromium 149 and Firefox 152:
 
 - the slides built without a voice: no synthesis, the check passes, the page opens as
@@ -442,6 +468,7 @@ developed on a 22-slide, 15-minute research talk before it was generalised here.
 
 ## Not tested, not built
 
+- **macOS and Windows.** See Platforms, under Requirements.
 - **By ear.** Nobody has to have listened for the check to pass. Say so in a report.
 - **Other browsers.** Firefox was run headless (152, Linux; driven over Marionette):
   keys, the settings panel and what it remembers, the voice, a missing audio folder,

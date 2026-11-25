@@ -54,7 +54,7 @@
 window.RevealNarrate = () => {
   let deck, T, N, slides, h = 0, k = 0, playing = false, auto = true, phase = 'idle', tok = 0, timer = null;
   let D, S0, TOTAL, groups, secOf, SEC, items = [], built = -1, idleT, theme, cues = [], raw = 0, rawT, DEF;
-  const VERSION = '0.5.1', ARC = new WeakMap(), WPM = 155;  // narrate.py's words per minute: a sentence without audio
+  const VERSION = '0.5.2', ARC = new WeakMap(), WPM = 155;  // narrate.py's words per minute: a sentence without audio
   // the voices found (name -> its voice.js, with map: text key -> {src, dur}), the one chosen ('none': a deck to present
   // by hand), how many worded steps it lacks, the text keys of the worded steps
   let VOX = Object.create(null), voice = 'none', miss = 0, KT = [], ready = false;

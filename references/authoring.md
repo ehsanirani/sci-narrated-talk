@@ -578,8 +578,12 @@ between them, with captions off and a step's phrased pointers all on.
   before a closing `:::` swallows the line break. Put a full stop or a space after it.
 - **Screenshots** are taken by a browser that the build drives slide by slide and that
   waits for fonts and clips; a clip is shown at the end of the sentence.
-- **No `chromium` on the PATH**: the check and `--shots` need Chromium or Chrome;
-  `--no-check` builds without them.
+- **No browser found**: the check and `--shots` need Chromium, Chrome or Edge, on the
+  PATH or where macOS and Windows install them; `CHROME=/path/to/one` names another,
+  and `--no-check` builds without. On Windows `--shots` and `record.py` do not run.
 - **`quarto preview`** works for layout, with the narration of the last build.
-- **Kokoro, uv, Quarto versions, drives that cannot run executables**: see
-  `../sci-video-talk/references/environment.md`; the tools are the same.
+- **The voice model**: Kokoro-82M v1.0, two files (337 MB), downloaded on first use to
+  `~/.cache/kokoro/` (`KOKORO_DIR` names another folder); after that no text and no
+  audio leaves the machine. `uv run --no-project` builds a throwaway environment from
+  the `--with` packages, so nothing is installed into the project; Kokoro needs
+  Python 3.10 or newer, which `--python ">=3.10"` has `uv` fetch where it is missing.

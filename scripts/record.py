@@ -1,6 +1,6 @@
 """Record a narrated talk to a video (the sci-narrated-talk skill): any built talk.html whose player is 0.3.0 or later.
 
-    nix shell nixpkgs#ffmpeg -c uv run --no-project --with soundfile --with numpy --with pillow python record.py talk.html
+    uv run --no-project --with soundfile --with numpy --with pillow python record.py talk.html
 
 Writes talk.mp4 beside the page (h264 and aac, with the captions as a subtitle track and one chapter per slide) and
 talk.srt. The recording is not a screen capture in real time. The page, opened with ?rec, is the talk as a function of
@@ -24,7 +24,8 @@ zoom, selecting text, switching the theme or the voice). The page plays a senten
 the video for the length the build measured; the two differ by less than a frame per sentence. A talk with no voice is
 not recorded: it is a deck to present by hand. A sentence the voice lacks is silent in the video, on its estimated
 length, as on the page.
-Needs ffmpeg and chromium (or google-chrome) on the PATH, and narrate.py beside this file.
+Needs ffmpeg on the PATH, Chromium, Chrome or Edge (found as narrate.py finds it), and narrate.py beside this file.
+Linux and macOS only.
 """
 
 import base64
@@ -150,6 +151,8 @@ def clip_frame(decs, c, w, h):
 
 
 def main():
+    if sys.platform == "win32":
+        sys.exit(narrate.NO_WINDOWS)
     argv = sys.argv[1:]
     out = Path(argv.pop(argv.index("-o") + 1)) if "-o" in argv[:-1] else None
     opts = dict(a.split("=", 1) if "=" in a else (a, "") for a in argv if a.startswith("--"))
@@ -161,7 +164,7 @@ def main():
     if not html.is_file():
         sys.exit(f"no such page: {html}")
     if not shutil.which("ffmpeg"):
-        sys.exit("ffmpeg is not on the PATH (on NixOS: nix shell nixpkgs#ffmpeg -c ...)")
+        sys.exit("ffmpeg is not on the PATH (with Nix: nix shell nixpkgs#ffmpeg -c uv run ...)")
     import numpy as np
 
     fps, t0, size, theme, voice = (float(opts.get("--fps") or 25), float(opts.get("--from") or 0), opts.get("--size"),
