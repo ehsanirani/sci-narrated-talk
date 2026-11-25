@@ -11,6 +11,38 @@ another voice, or present it by hand with none.
 `SKILL.md` tells Claude how to make such a talk. This file explains what the skill
 contains, how the pieces fit, and what has and has not been tested.
 
+## Install
+
+It needs [Claude Code](https://claude.com/claude-code), Git,
+[uv](https://docs.astral.sh/uv/) and [Quarto](https://quarto.org/docs/get-started/)
+1.4 or newer, and Chrome, Chromium or Edge for the build's check. On Windows uv and
+Quarto install with `winget install astral-sh.uv Posit.Quarto`.
+
+In Claude Code, on any system:
+
+```
+/plugin marketplace add ehsanirani/sci-narrated-talk
+/plugin install sci-narrated-talk@sci-narrated-talk
+```
+
+Start Claude Code again. `/plugin marketplace update sci-narrated-talk` fetches a newer
+version later. The other way is a clone into the skills folder, updated with `git pull`
+(one way or the other, not both, or the skill is there twice):
+
+```sh
+git clone https://github.com/ehsanirani/sci-narrated-talk ~/.claude/skills/sci-narrated-talk
+```
+
+On Windows in PowerShell that folder is `"$HOME\.claude\skills\sci-narrated-talk"`.
+
+**A first test.** Start Claude Code in an empty folder and say: *Use the
+sci-narrated-talk skill: copy its starter talk into this folder and build it.* The
+first build downloads the voice model (340 MB). It should end with a line that starts
+`check: 12 steps on 4 slides reached in order`. Open `talk.html` in a browser and press
+space: a voice tells four slides about a random walk, in 1.3 minutes; `?` lists the
+keys. On Windows the build is not to be asked for screenshots (`--shots`), and what the
+check says there is not yet known: see Platforms, under Requirements.
+
 ## Why not a video
 
 `sci-video-talk` renders the same kind of talk to an `.mp4`. A video is a recording of
@@ -366,27 +398,6 @@ from Git Bash (`sh build.sh`; Claude Code runs it there): the script finds Chrom
 Edge, reads and writes UTF-8, and calls `quarto.cmd`. `--shots` and `record.py` do not
 run on Windows, since they drive the browser through inherited pipes. Neither macOS
 nor Windows has been tried.
-
-**Installing it.** The skill is this folder, public as
-[ehsanirani/sci-narrated-talk](https://github.com/ehsanirani/sci-narrated-talk). In
-Claude Code, on any system:
-
-```
-/plugin marketplace add ehsanirani/sci-narrated-talk
-/plugin install sci-narrated-talk@sci-narrated-talk
-```
-
-`/plugin marketplace update sci-narrated-talk` fetches a newer version. The other way
-is a clone into the skills folder, updated with `git pull` (one way or the other, not
-both, or the skill is there twice):
-
-```sh
-git clone https://github.com/ehsanirani/sci-narrated-talk ~/.claude/skills/sci-narrated-talk
-```
-
-On Windows in PowerShell that folder is `"$HOME\.claude\skills\sci-narrated-talk"`.
-Start Claude Code again, then ask for a narrated talk, or type `/sci-narrated-talk`
-(installed as a plugin: `/sci-narrated-talk:sci-narrated-talk`).
 
 ## Tested
 
