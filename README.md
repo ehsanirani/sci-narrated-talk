@@ -3,8 +3,8 @@
 A scientific talk that tells itself: a Quarto + reveal.js deck in which a synthetic
 voice narrates every slide, sentence by sentence, while the slide builds. The result is
 an HTML page that opens offline, with its voices in a folder beside it (or a one-file
-copy with the voice, the clips or both inside). The viewer can let it run like a video, steer it like a deck, pick
-another voice, or present it by hand with none.
+copy with the voice, the clips or both inside). The viewer can let it run like a video,
+steer it like a deck, pick another voice, or present it by hand with none.
 
 ![The starter talk playing, with the outline open](docs/player.png)
 
@@ -13,22 +13,40 @@ contains, how the pieces fit, and what has and has not been tested.
 
 ## Install
 
-It needs [Claude Code](https://claude.com/claude-code), Git,
-[uv](https://docs.astral.sh/uv/) and [Quarto](https://quarto.org/docs/get-started/)
-1.4 or newer, and Chrome, Chromium or Edge for the build's check. On Windows the
-three tools install with `winget install Git.Git astral-sh.uv Posit.Quarto` (Git for
-Windows brings Git Bash, in which the build script runs); open a new terminal after it.
+The skill is a plugin for [Claude Code](https://claude.com/claude-code), installed from
+this repository, which is its own marketplace.
 
-In Claude Code, on any system:
+1. **The tools the build uses**: Git, [uv](https://docs.astral.sh/uv/) and
+   [Quarto](https://quarto.org/docs/get-started/) 1.4 or newer; Chrome, Chromium or
+   Edge for the build's check. On Windows, in PowerShell, then in a new terminal:
 
-```
-/plugin marketplace add ehsanirani/sci-narrated-talk
-/plugin install sci-narrated-talk@sci-narrated-talk
-```
+   ```powershell
+   winget install Git.Git astral-sh.uv Posit.Quarto
+   ```
 
-Start Claude Code again. `/plugin marketplace update sci-narrated-talk` fetches a newer
-version later. The other way is a clone into the skills folder, updated with `git pull`
-(one way or the other, not both, or the skill is there twice):
+   (Git for Windows brings Git Bash, in which the build script runs.)
+
+2. **The skill**, typed inside Claude Code, on any system:
+
+   ```
+   /plugin marketplace add ehsanirani/sci-narrated-talk
+   /plugin install sci-narrated-talk@sci-narrated-talk
+   ```
+
+   The first line makes this repository known as a marketplace, the second installs
+   its one plugin. The same from a terminal: `claude plugin marketplace add
+   ehsanirani/sci-narrated-talk`, then `claude plugin install
+   sci-narrated-talk@sci-narrated-talk`.
+
+3. **Start Claude Code again.** `/plugin` lists it under Installed. Ask for a narrated
+   talk, or type `/sci-narrated-talk:sci-narrated-talk`.
+
+To update: `/plugin marketplace update sci-narrated-talk`, then in a terminal `claude
+plugin update sci-narrated-talk@sci-narrated-talk`, and start Claude Code again. To
+remove: `claude plugin uninstall sci-narrated-talk@sci-narrated-talk`.
+
+Without the plugin system, a clone into the skills folder does the same and is updated
+with `git pull` (one way or the other, not both, or the skill is there twice):
 
 ```sh
 git clone https://github.com/ehsanirani/sci-narrated-talk ~/.claude/skills/sci-narrated-talk
@@ -46,7 +64,8 @@ check says there is not yet known: see Platforms, under Requirements.
 
 ## Why not a video
 
-`sci-video-talk` renders the same kind of talk to an `.mp4`. A video is a recording of
+`sci-video-talk`, a sibling skill of the same author that is not public, renders the
+same kind of talk to an `.mp4`. A video is a recording of
 a sequence of events; this skill ships the sequence itself.
 
 | | video (`sci-video-talk`) | narrated talk (this skill) |
@@ -63,19 +82,21 @@ an `.mp4` afterwards (Recording a video, below).
 
 ## Quick start
 
+By hand, without Claude, from a clone of this repository:
+
 ```sh
-skill=~/.claude/skills/sci-narrated-talk
+skill=~/.claude/skills/sci-narrated-talk   # or wherever the clone is
 cp -rL $skill/assets/talk mytalk
 cp -L $skill/scripts/narrate.py mytalk/
 chmod -R u+w mytalk
-cd mytalk
-uv run --no-project --python ">=3.10" --with kokoro-onnx --with soundfile --with pyyaml --with matplotlib --with pillow \
-    python narrate.py --shots
-# then open talk.html in a browser
+sh mytalk/build.sh
+# then open mytalk/talk.html in a browser
 ```
 
-The `-L` and the `chmod` are for an install by Nix, where the skill is a tree of
-read-only links into the store; elsewhere they do no harm. The first build downloads the voice model (340 MB) to `~/.cache/kokoro/`.
+`build.sh` is the `uv run ... python narrate.py` command, with its packages. The `-L`
+and the `chmod` are for an install by Nix, where the skill is a tree of read-only links
+into the store; elsewhere they do no harm. The first build downloads the voice model
+(340 MB) to `~/.cache/kokoro/`.
 The starter is a four-slide talk about a random walk, the twin of the video skill's
 starter: 1.3 minutes; `talk.html` is 6.3 MB, its voice 0.5 MB, and the one-file copy
 with the voice inside (`--bundle=voice`) 7.0 MB.
@@ -91,9 +112,11 @@ writes `talk.mp4` beside the page (h264 and aac, the captions as a subtitle trac
 chapter per slide) and `talk.srt`, with the voice the talk opens with. Options:
 `--voice=NAME` (another of its voices; a talk with no voice is refused: it is a deck to
 present by hand), `--from=S --to=S` (a stretch, for a trial), `--theme=NAME`,
-`--size=1280x720`, `--fps=25`, `--crf=20`, `-o FILE`. `record.py` needs `narrate.py`
-beside it, ffmpeg (with Nix: `nix shell nixpkgs#ffmpeg -c` before the command) and Chromium, and a page whose player is 0.3.0 or later (`--voice`:
-0.5.0). A sentence the voice lacks is silent in the video, on its estimated length.
+`--size=1280x720`, `--fps=25`, `--crf=20`, `-o FILE`. `record.py` runs on Linux and
+macOS, not on Windows. It needs `narrate.py` beside it, ffmpeg (with Nix: `nix shell
+nixpkgs#ffmpeg -c` before the command), the browser of the build's check, and a page
+whose player is 0.3.0 or later (`--voice`: 0.5.0). A sentence the voice lacks is silent
+in the video, on its estimated length.
 
 How long it takes: a 15-minute talk with 27 clips, 22,378 frames at 1920x1080, took
 5.5 minutes on a 12-thread laptop, with 968 frames photographed. Most of the time is
@@ -313,6 +336,7 @@ inside a shared file (`at`), so a free voice fits it without a change.
 ```
 sci-narrated-talk/
 ├── SKILL.md                      # the instructions Claude follows
+├── .claude-plugin/marketplace.json  # what makes the folder installable as a plugin
 ├── README.md                     # this file
 ├── docs/                         # the two pictures of this file
 ├── references/authoring.md       # say blocks, figures, numbers, clips, settings, player, failures
